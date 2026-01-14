@@ -1,0 +1,17 @@
+when:
+  event: push
+steps:
+# Determine and export the branch name via file
+- name:        branch
+  image:       alpine/git:latest
+  commands:    [ "printf $(git rev-parse --abbrev-ref HEAD) | tee BRANCH" ]
+# Build the container image and publish it to the private registry
+- name:        build
+  image:       oci.hack.bg/podman:latest
+  privileged:  true
+  commands:    [ "/bin/hackbg-build-podman -t oci.hack.bg/simplicityhl-oracle" ]
+  environment: { NAME: oci.hack.bg/simplicityhl-oracle }
+# Run the tests in the newly built image
+- name:        test
+  image:       oci.hack.bg/simplicityhl-oracle:latest
+  commands:    [ "just test" ]
