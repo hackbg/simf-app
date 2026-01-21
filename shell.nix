@@ -3,4 +3,4 @@
   sh = name: nativeBuildInputs: opts:
     pkgs.mkShell ({ inherit name nativeBuildInputs; } // opts);
 
-in sh "oracle" [ pkgs.deno ] {}
+in sh "oracle" [ pkgs.deno pkgs.podman-compose ] {}
