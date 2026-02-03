@@ -28,8 +28,8 @@ async function Client ({
           console.log('Status check flow', oracle, ...args);
           const url  = new URL(oracle);
           const resp = await fetch(url);
-          const json = await resp.json();
-          console.log(json);
+          const json = await resp.text();
+          console.log({ resp, json });
           return;
         }
         case 'buy': {

@@ -1,23 +1,16 @@
 #!/usr/bin/env -S just -f
 
 ALLOW_IMPORT := "--allow-import=cdn.skypack.dev:443,deno.land:443,jsr.io:443"
+ALLOW_ENV    := "--allow-env=FADROMA_SIMF_WASM,FADROMA_SIMF_WRAP,TERM_PROGRAM,TMPDIR,TMP,TEMP,NODE_V8_COVERAGE"
+ALLOW_FS     := "--allow-read=. --allow-write=/tmp/fadroma"
+BIN_PROGRAM  := "./src/escrow.ts"
+BIN_SERVER   := "./src/server.ts"
+BIN_CLIENT   := "./src/client.ts"
 
 # Display available commands
 [private]
 usage:
   @just -l
-
-# Typecheck the project
-check:
-  deno check {{ALLOW_IMPORT}} *.ts
-
-# Run the test suite
-test:
-  deno test test.ts
-
-# Run the framework's test suite
-test-fadroma:
-  cd fadroma && just test
 
 # Build the WASM binary
 wasm:
@@ -25,34 +18,38 @@ wasm:
 
 # Deposit funds as escrow program
 deploy price="1" amount="1":
-  ./escrow.ts deploy {{price}} {{amount}}
+  {{BIN_PROGRAM}} deploy {{price}} {{amount}}
 
 # Withdraw funds from program
 consume price="1" amount="1":
-  ./escrow.ts consume {{price}} {{amount}}
+  {{BIN_PROGRAM}} consume {{price}} {{amount}}
 
 # Run the escrow service
 server +ARGS='':
   #!/usr/bin/env bash
   set -ueo pipefail
-  deno run \
+  deno run {{ALLOW_FS}} {{ALLOW_IMPORT}} {{ALLOW_ENV}} \
     --allow-net=127.0.0.1:8940 \
     --allow-run=$(which elementsd) \
-    --allow-read=.,../fadroma \
-    {{ALLOW_IMPORT}} \
-    --allow-env=FADROMA_SIMF_WASM,FADROMA_SIMF_WRAP,TERM_PROGRAM,TMPDIR,TMP,TEMP,NODE_V8_COVERAGE \
-    --allow-write=/tmp/fadroma \
-    server.ts --chain=spawn {{ARGS}}
+    {{BIN_SERVER}} --chain=spawn {{ARGS}}
 
 # Run the command-line client
 client +ARGS='':
   #!/usr/bin/env bash
   set -ueo pipefail
-  deno run \
+  deno run {{ALLOW_FS}} {{ALLOW_IMPORT}} {{ALLOW_ENV}} \
     --allow-net=127.0.0.1:8940,127.0.0.1:8941 \
     --allow-run=$(which elementsd) \
-    --allow-read=.,../fadroma \
-    {{ALLOW_IMPORT}} \
-    --allow-env=FADROMA_SIMF_WASM,FADROMA_SIMF_WRAP,TERM_PROGRAM,TMPDIR,TMP,TEMP,NODE_V8_COVERAGE \
-    --allow-write=/tmp/fadroma \
-    client.ts --chain=spawn --oracle=spawn {{ARGS}}
+    {{BIN_CLIENT}} --chain=spawn --oracle=spawn {{ARGS}}
+
+# Run the application's test suite
+test:
+  deno test {{ALLOW_FS}} {{ALLOW_IMPORT}} {{ALLOW_ENV}} --no-check src/test.ts
+
+# Run the framework's test suite
+test-fadroma:
+  cd fadroma && just test
+
+# Typecheck the project
+check:
+  deno check {{ALLOW_IMPORT}} src/*.ts

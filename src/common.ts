@@ -1,4 +1,4 @@
-import { Fn, Async } from "fadroma";
+import { Fn, Log, Async } from "fadroma";
 import { parseArgs } from "jsr:@std/cli/parse-args";
 export interface Service {
   teardown: () => Promise<void>,
@@ -16,7 +16,7 @@ export function Service (
     if (help)    { console.log(flags);  exit(1); }
     if (version) { console.log('beta'); exit(0); }
     try {
-      self = await main(config as Parameters<typeof main>[0]);
+      self = await main(Log(config as Parameters<typeof main>[0]));
       await self.command(..._);
     } catch (e) {
       console.error(e);
