@@ -2,6 +2,10 @@
 
 ALLOW_IMPORT := "--allow-import=cdn.skypack.dev:443,deno.land:443,jsr.io:443"
 
+[private]
+usage:
+  @just -l
+
 check:
   deno check {{ALLOW_IMPORT}} *.ts
 
@@ -33,8 +37,3 @@ consume price="1" amount="1":
 
 test:
   deno test escrow.test.ts
-
-[private]
-[default]
-usage:
-  @just -l
