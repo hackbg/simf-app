@@ -33,9 +33,11 @@ consume price="1" amount="1":
 
 # Run the escrow service
 server +ARGS='':
+  #!/bin/sh
+  set -ueo pipefail
   deno run \
     --allow-net=127.0.0.1:8940 \
-    --allow-run=elementsd \
+    --allow-run=$(which elementsd) \
     --allow-read=.,../fadroma \
     {{ALLOW_IMPORT}} \
     --allow-env=FADROMA_SIMF_WASM,FADROMA_SIMF_WRAP,TERM_PROGRAM,TMPDIR,TMP,TEMP,NODE_V8_COVERAGE \
@@ -44,9 +46,11 @@ server +ARGS='':
 
 # Run the command-line client
 client +ARGS='':
+  #!/bin/sh
+  set -ueo pipefail
   deno run \
     --allow-net=127.0.0.1:8940,127.0.0.1:8941 \
-    --allow-run=elementsd \
+    --allow-run=$(which elementsd) \
     --allow-read=.,../fadroma \
     {{ALLOW_IMPORT}} \
     --allow-env=FADROMA_SIMF_WASM,FADROMA_SIMF_WRAP,TERM_PROGRAM,TMPDIR,TMP,TEMP,NODE_V8_COVERAGE \
