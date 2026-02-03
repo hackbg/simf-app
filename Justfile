@@ -33,7 +33,7 @@ consume price="1" amount="1":
 
 # Run the escrow service
 server +ARGS='':
-  #!/bin/sh
+  #!/usr/bin/env bash
   set -ueo pipefail
   deno run \
     --allow-net=127.0.0.1:8940 \
@@ -46,7 +46,7 @@ server +ARGS='':
 
 # Run the command-line client
 client +ARGS='':
-  #!/bin/sh
+  #!/usr/bin/env bash
   set -ueo pipefail
   deno run \
     --allow-net=127.0.0.1:8940,127.0.0.1:8941 \
