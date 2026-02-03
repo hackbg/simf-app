@@ -36,4 +36,7 @@ consume price="1" amount="1":
   ./escrow.ts consume {{price}} {{amount}}
 
 test:
-  deno test escrow.test.ts
+  deno test test.ts
+
+test-fadroma:
+  cd fadroma && just test
