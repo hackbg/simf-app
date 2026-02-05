@@ -60,6 +60,7 @@ async function Server ({
   }
 }
 namespace Server {
+  const decoder = new TextDecoder();
   export interface Context extends Http.Context {
     kv: Deno.Kv;
     chain: Btc;
@@ -70,20 +71,46 @@ namespace Server {
   };
   export const FLAGS = Flags({ string: ["chain", "listen"] }, DEFAULTS);
   export const ROUTES = Http(
-    Http.Get('/',  showStatus),
-    Http.Post('/', openPosition));
-  export async function showStatus ({ req, kv, chain }: Context) {
+    Http.Get('/',  query),
+    Http.Post('/', transact));
+  export async function query ({ req, kv, chain }: Context) {
     const name = `fadroma-${+new Date()}`;
     await chain.rpc.createwallet(name);
     const addr = await chain.rpc.getnewaddress(name, "bech32");
     await chain.rpc.generatetoaddress(100, addr);
     await chain.rpc.rescanblockchain();
     const { balance } = await chain.rpc.getwalletinfo();
-    const positions = (await kv.get(["positions"])).value || [];
+    const positions = (await kv.list({ prefix: ["positions"] })).value || [];
     return { status: { balance, positions } };
   }
-  export function openPosition ({ req, kv }: Context) {
-    return { opened: {} };
+  export async function transact ({ req, kv }: Context) {
+    const body = JSON.parse(await readBody(req));
+    if (Object.keys(body).length == 1) {
+      if (body.make) return await make({ kv })
+      if (body.take) return await take({ kv });
+    }
+    throw Object.assign(new Error('make or take'), { http: 400 })
+  }
+  async function make ({ kv, amount = 1 }) {
+    await kv.set(["positions", +new Date()], amount);
+    const positions = await kv.list({ prefix: ["positions"] });
+    for await (const position of positions) console.log(position.key[1], position.value);
+    return { "made": {} }
+  }
+  async function take ({ kv, amount = 1 }) {
+    return { "took": {} }
+  }
+  function readBody (req: Request) {
+    return new Promise((resolve, reject) => {
+      const data = [];
+      try {
+        req.on('error', reject);
+        req.on('data', chunk => data.push(chunk));
+        req.on('end', () => resolve(decoder.decode(Buffer.concat(data))));
+      } catch(e) {
+        reject(e);
+      }
+    })
   }
   export const LOCALNET = {
     chain:                       'elementsregtest',

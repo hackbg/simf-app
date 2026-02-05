@@ -20,13 +20,9 @@ async function Client ({
     server = await Server({ color, log, debug, chain });
     oracle = server.listen;
   }
-  const getJson  = async () =>
-    await (await fetch(new URL(oracle))).json();
-  const postJson = async (body) =>
-    await (await fetch(new URL(oracle), { method: 'post', body })).json();
   return {
     async command (..._: (string|number)[]) {
-      const [command = 'stat', ...args] = _;
+      const [command = 'stat', ..._args] = _;
       switch (command) {
         case 'stat': return console.log(await getJson());
         case 'make': return console.log(await postJson({ make: {} }));
@@ -43,5 +39,11 @@ async function Client ({
         debug('Stopped local oracle');
       }
     }
+  }
+  async function getJson () {
+    return await (await fetch(new URL(oracle))).json();
+  }
+  async function postJson (body: unknown) {
+    return await (await fetch(new URL(oracle), { method: 'post', body: JSON.stringify(body) })).json();
   }
 }
