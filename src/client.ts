@@ -20,22 +20,17 @@ async function Client ({
     server = await Server({ color, log, debug, chain });
     oracle = server.listen;
   }
+  const getJson  = async () =>
+    await (await fetch(new URL(oracle))).json();
+  const postJson = async (body) =>
+    await (await fetch(new URL(oracle), { method: 'post', body })).json();
   return {
     async command (..._: (string|number)[]) {
-      const [command = 'status', ...args] = _;
+      const [command = 'stat', ...args] = _;
       switch (command) {
-        case 'status': {
-          console.log('Status check flow', oracle, ...args);
-          const url  = new URL(oracle);
-          const resp = await fetch(url);
-          const json = await resp.text();
-          console.log({ resp, json });
-          return;
-        }
-        case 'buy': {
-          console.log('Buy flow', ...args);
-          return;
-        }
+        case 'stat': return console.log(await getJson());
+        case 'make': return console.log(await postJson({ make: {} }));
+        case 'take': return console.log(await postJson({ take: {} }));
         default: {
           throw new Error(`unknown command ${command}`)
         }
