@@ -1,1 +1,6 @@
-{ "imports": { "env": "./src/wasm_env.ts" } }
+{
+  "imports": {
+    "env":     "./src/wasm_env.ts",
+    "fadroma": "./fadroma/lib/index.ts"
+  }
+}

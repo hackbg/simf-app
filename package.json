@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "fadroma": "file:./fadroma",
     "@types/node": "*"
   }
 }
