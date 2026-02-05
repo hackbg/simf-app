@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run
+import { Buffer } from 'node:buffer';
 import { Http, Port } from "fadroma";
 import type { Btc } from "fadroma";
 import { Service, Flags } from './common.ts';
@@ -32,30 +33,27 @@ async function Server ({
     debug(`Using chain ${chain}`);
   }
   const listener = await router({ warn, log, debug, kv, chain: localnet });
-  return {
-    listen,
-    localnet,
-    async command (...args: (string|number)[]) {
-      log('Listening until process exit on', listen)
-      if (args.length > 0) warn('Commands ignored:', ...args);
-      await new Promise(()=>{});
-    },
-    async teardown () {
-      if (typeof kv?.close === 'function') {
-        debug('Stopping KV store');
-        await kv.close();
-        debug('Stopped KV store');
-      }
-      if (typeof listener?.close() === 'function') {
-        debug('Stopping listener');
-        await listener.close();
-        debug('Stopped listener');
-      }
-      if (typeof localnet?.kill === 'function') {
-        debug('Stopping localnet');
-        await localnet.kill();
-        debug('Stopped localnet');
-      }
+  return { listen, localnet, command, teardown };
+  async function command (...args: (string|number)[]) {
+    log('Listening until process exit on', listen)
+    if (args.length > 0) warn('Commands ignored:', ...args);
+    await new Promise(()=>{});
+  }
+  async function teardown () {
+    if (typeof kv?.close === 'function') {
+      debug('Stopping KV store');
+      await kv.close();
+      debug('Stopped KV store');
+    }
+    if (typeof listener?.close() === 'function') {
+      debug('Stopping listener');
+      await listener.close();
+      debug('Stopped listener');
+    }
+    if (typeof localnet?.kill === 'function') {
+      debug('Stopping localnet');
+      await localnet.kill();
+      debug('Stopped localnet');
     }
   }
 }
@@ -80,27 +78,26 @@ namespace Server {
     await chain.rpc.generatetoaddress(100, addr);
     await chain.rpc.rescanblockchain();
     const { balance } = await chain.rpc.getwalletinfo();
-    const positions = (await kv.list({ prefix: ["positions"] })).value || [];
-    return { status: { balance, positions } };
+    const orders = (await kv.list({ prefix: ["orders"] })).value || [];
+    return { status: { balance, orders } };
   }
   export async function transact ({ req, kv }: Context) {
     const body = JSON.parse(await readBody(req));
     if (Object.keys(body).length == 1) {
-      if (body.make) return await make({ kv })
-      if (body.take) return await take({ kv });
+      if (body.make) return await make({ ...body.make, kv });
+      if (body.take) return await take({ ...body.make, kv });
     }
     throw Object.assign(new Error('make or take'), { http: 400 })
   }
-  async function make ({ kv, amount = 1 }) {
-    await kv.set(["positions", +new Date()], amount);
-    const positions = await kv.list({ prefix: ["positions"] });
-    for await (const position of positions) console.log(position.key[1], position.value);
-    return { "made": {} }
+  async function make ({ kv, amount = 1, price = 1 }) {
+    await kv.atomic().mutate({ type: 'sum', key: ["made", price], value: amount }).commit();
+    return { "made": { price, amount } }
   }
-  async function take ({ kv, amount = 1 }) {
+  async function take ({ kv, amount = 1, price = 1 }) {
+    await kv.atomic().mutate({ type: 'sum', key: ["took", price], value: amount }).commit();
     return { "took": {} }
   }
-  function readBody (req: Request) {
+  function readBody (req: Http.Request): Promise<string> {
     return new Promise((resolve, reject) => {
       const data = [];
       try {

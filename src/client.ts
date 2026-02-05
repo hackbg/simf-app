@@ -12,7 +12,7 @@ async function Client ({
   debug  = console.debug,
   chain  = FLAGS.default!.chain!,
   oracle = FLAGS.default!.oracle!,
-}): Promise<Client> {
+} = {}): Promise<Client> {
   debug('Starting Simplicity Oracle Client');
   let server = null;
   if (oracle === 'spawn') {
@@ -20,24 +20,23 @@ async function Client ({
     server = await Server({ color, log, debug, chain });
     oracle = server.listen;
   }
-  return {
-    async command (..._: (string|number)[]) {
-      const [command = 'stat', ..._args] = _;
-      switch (command) {
-        case 'stat': return console.log(await getJson());
-        case 'make': return console.log(await postJson({ make: {} }));
-        case 'take': return console.log(await postJson({ take: {} }));
-        default: {
-          throw new Error(`unknown command ${command}`)
-        }
+  return { command, teardown }
+  async function command (..._: (string|number)[]) {
+    const [command = 'stat', ...args] = _;
+    switch (command) {
+      case 'stat': return console.log(await getJson());
+      case 'make': return console.log(await postJson({ make: { amount: args[0], price: args[1] } }));
+      case 'take': return console.log(await postJson({ take: { amount: args[0] } }));
+      default: {
+        throw new Error(`unknown command ${command}`)
       }
-    },
-    async teardown () {
-      if (server) {
-        debug('Stopping local oracle');
-        await server?.teardown();
-        debug('Stopped local oracle');
-      }
+    }
+  }
+  async function teardown () {
+    if (server) {
+      debug('Stopping local oracle');
+      await server?.teardown();
+      debug('Stopped local oracle');
     }
   }
   async function getJson () {
