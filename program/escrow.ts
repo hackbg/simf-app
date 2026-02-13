@@ -1,5 +1,7 @@
-#!/usr/bin/env -S deno run --allow-read=.,../fadroma --allow-import=cdn.skypack.dev:443,deno.land:443 --allow-env=FADROMA_SIMF_WASM,FADROMA_SIMF_WRAP,TERM_PROGRAM
+#!/usr/bin/env -S deno run -P
 import { Fn, SimplicityHL } from "fadroma";
+const wasm = await SimplicityHL.Wasm();
+
 export default Escrow;
 
 interface Escrow {

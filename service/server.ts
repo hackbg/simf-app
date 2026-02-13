@@ -1,8 +1,10 @@
-#!/usr/bin/env -S deno run
+#!/usr/bin/env -S deno run -P
 import type { Bitcoin } from "fadroma";
 import { Http } from "fadroma";
 import { Service, Flags } from './common.ts';
+
 export default Service(import.meta, Server, Server.FLAGS);
+
 /** Server state. */
 interface Server extends Service {
   /** Listen URL. */

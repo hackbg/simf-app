@@ -1,5 +1,5 @@
+#!/usr/bin/env -S deno run -P
 import { SimplicityHL } from "fadroma";
-
 const wasm = await SimplicityHL.Wasm();
 
 export default Vault;

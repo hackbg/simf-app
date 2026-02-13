@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run
+#!/usr/bin/env -S deno run -P
 import { Service, Flags } from './common.ts';
 
 export default Service(import.meta, Client, Client.FLAGS);
