@@ -7,10 +7,15 @@ the cross-chain framework by [Hack.bg](https://hack.bg).
 
 ## Architecture
 
-We plan to implement the equivalent of "oracle-gated liquidity pools"
-in the form of escrow program instances that require a signed witness
-of the external price feed at the moment of fulfillment, in order to
-release the funds.
+The **oracle** is a backend service which periodically emits an **attestation**
+about the value of an external datum, such as the exchange price of a given token.
+
+The **vault** is a SimplicityHL program which holds a certain amount of funds.
+Its balance can be transferred by fulfilling the program's condition, which is
+parameterized over the data attested by the oracle.
+
+Now building the elementar vault: one which allows the holder of the attestation
+to purchase a number of tokens proportional to the attested price.
 
 ## Install
 
@@ -59,7 +64,8 @@ just test
 ### Contribute!
 
 Run `just -l` or read the `Justfile` for the full list
-of pre-defined development actions.
+of pre-defined development actions. These are meant to
+facilitate making and testin modifications to the code.
 
 ## Deploy
 
