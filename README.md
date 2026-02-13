@@ -12,7 +12,7 @@ in the form of escrow program instances that require a signed witness
 of the external price feed at the moment of fulfillment, in order to
 release the funds.
 
-## Setup
+## Install
 
 A container build is in the works. Meanwhile, setup is manual:
 
@@ -48,7 +48,20 @@ You will need to compile it with:
 just wasm
 ```
 
-## Deployment
+### Run the tests
+
+Run the test suite in `test.ts` with:
+
+```
+just test
+```
+
+### Contribute!
+
+Run `just -l` or read the `Justfile` for the full list
+of pre-defined development actions.
+
+## Deploy
 
 The **oracle server** is started in the foreground with:
 
@@ -72,7 +85,7 @@ just server --chain=<RPCURL>
 
 > This part is not documented yet!
 
-## Usage
+## Use
 
 ### CLI
 
@@ -106,16 +119,3 @@ just client --chain=<RPCURL> --oracle=<APIURL> <...ARGS>
 ### SDK
 
 > This part is not documented yet!
-
-## Development
-
-Run `just -l` or read the `Justfile` for a full list
-of pre-defined development actions, such as the following:
-
-### Testing
-
-Run the test suite in `test.ts` with:
-
-```
-just test
-```
