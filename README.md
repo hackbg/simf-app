@@ -28,7 +28,10 @@ release the funds.
 
 ### Development
 
-See `Justfile`.
+See `Justfile` or run `just -l` for DX overview.
+
+If you have Nix and Direnv, run `direnv allow` in repo
+to provide minimum necessary tooling (Just, Deno, Podman).
 
 ### Deployment
 
