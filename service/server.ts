@@ -12,6 +12,7 @@ interface Server extends Service {
   /** Localnet handle. */
   localnet?: Bitcoin,
 }
+
 /** Run a microservice that deploys SimplicityHL programs
   * and signs witness attestations from a price feed. */ 
 async function Server ({
@@ -23,10 +24,12 @@ async function Server ({
   listen = Server.DEFAULTS.listen,
   routes = Server.ROUTES,
   router = Http.Listen(listen, routes),
-} = {}): Promise<Server> {
+}: Server.Options = {}): Promise<Server> {
+  debug('Starting Simplicity Oracle Server');
+
   debug('Initializing KV store...');
   const kv: Deno.Kv = await store;
-  debug('Starting Simplicity Oracle Server');
+
   // For testing, the server can boot a localnet in `elementsregtest` mode.
   // This requires a compatible `elementsd` to be present on the system `PATH`.
   let localnet: Bitcoin;
@@ -35,6 +38,7 @@ async function Server ({
   } else {
     debug(`Using chain ${chain}`);
   }
+
   // Routes evaluate in this context:
   const context = {
     debug, log, warn, kv, chain: localnet, listen,
@@ -45,31 +49,68 @@ async function Server ({
       await new Promise(()=>{});
     },
   };
-  // Add the listener itself to the context:
-  return Object.assign(context, { listener: await router(context) });
+
+  // Run the HTTP router with the context:
+  const listener = await router(context);
+
+  // Add the listener itself to the context,
+  // and return the whole thing:
+  return Object.assign(context, { listener });
 }
+
 namespace Server {
-  const decoder = new TextDecoder();
+
+  export const DEFAULTS = {
+    chain:  'http://127.0.0.1:8941',
+    listen: 'http://127.0.0.1:8940',
+  };
+
+  export const FLAGS = Flags({
+    string: ["chain", "listen"]
+  }, DEFAULTS);
+
   const { Get, Post, readBody } = Http;
-  export type  Context  = Http.Context & { chain: Bitcoin; kv: Deno.Kv; };
-  export const DEFAULTS = { chain: 'http://127.0.0.1:8941', listen: 'http://127.0.0.1:8940', };
-  export const FLAGS    = Flags({ string: ["chain", "listen"] }, DEFAULTS);
-  export const ROUTES   = Http(
-    Get('/',       onGET),
+
+  /** Routes: should we do REST style (endpoint per method)
+    * or RPC style (method name is another parameter)? */
+  export const ROUTES = Http(
+    // RPC style:
+    Get('/',       getStatus),
+    Post('/',      postAnything),
+    // REST style:
     Get('/vault',  getDeployVaultPSET),
     Get('/attest', getAttestationWitness),
-    Post('/',      onPOST));
+  );
+
+  export interface Options extends Log {
+    store:  Deno.Kv;
+    chain:  string;
+    listen: string;
+    routes: Http;
+    router: () => Fn.Async<HttpServer>;
+  }
+
+  export interface Context extends Http.Context {
+    chain: Bitcoin;
+    kv:    Deno.Kv;
+  };
+
   export async function getDeployVaultPSET (context: Context) {
+    // TODO: this deploys the vault
   }
+
   export async function getAttestationWitness (context: Context) {
+    // TODO: this provides the price attestation
   }
-  export async function onGET ({ req, kv, chain }: Context) {
+
+  export async function getStatus ({ req, kv, chain }: Context) {
     await chain.rpc.rescanblockchain();
     const { balance } = await chain.rpc.getwalletinfo();
     const orders = (await kv.list({ prefix: ["orders"] })).value || [];
     return { status: { balance, orders } };
   }
-  export async function onPOST ({ req, kv }: Context) {
+
+  export async function postAnything ({ req, kv }: Context) {
     const body = JSON.parse(await readBody(req));
     if (Object.keys(body).length == 1) {
       if (body.make) return await make({ ...body.make, kv });
@@ -77,10 +118,43 @@ namespace Server {
     }
     throw Object.assign(new Error('make or take'), { http: 400 })
   }
+
   export async function regtestSetup ({ debug }) {
     debug('Starting Elements localnet')
     const { Bitcoin } = await import('fadroma');
-    const chain = await Bitcoin(Server.LOCALNET) as Bitcoin;
+    const chain = await Bitcoin({
+      chain:                       'elementsregtest',
+      acceptnonstdtxn:             true,
+      anyonecanspendaremine:       true,
+      bech32_hrp:                  'tex',
+      blech32_hrp:                 'tlq',
+      blindedprefix:               23,
+      blindedaddresses:            true,
+      con_blocksubsidy:            0,
+      con_connect_genesis_outputs: true,
+      con_elementsmode:            true,
+      defaultpeggedassetname:      'bitcoin',
+      discover:                    false,
+      dnsseed:                     false,
+      evbparams:                   'simplicity:-1:::',
+      //feeasset:                    'b2e15d0d7a0c94e4e2ce0fe6e8691b9e451377f6e46e8045a86f7c4b5d4f0f23',
+      initialfreecoins:            1000000n * 100000000n,
+      initialreissuancetokens:     1n * 100000000n,
+      maxtxfee:                    100.0,
+      persistmempool:              false,
+      pubkeyprefix:                36,
+      rest:                        true,
+      rpcallowip:                  '127.0.0.1',
+      rpcpassword:                 'fadroma',
+      rpcport:                     8941,
+      rpcuser:                     'fadroma',
+      scriptprefix:                13,
+      server:                      true,
+      //subsidyasset:                'b2e15d0d7a0c94e4e2ce0fe6e8691b9e451377f6e46e8045a86f7c4b5d4f0f23',
+      txindex:                     true,
+      validatepegin:               false,
+      vbparams:                    "taproot:1:1",
+    }) as Bitcoin;
     debug('Started Elements localnet');
     const name = `fadroma-${+new Date()}`;
     debug(`Funding test wallet ${name}`);
@@ -90,47 +164,16 @@ namespace Server {
     debug(`Funded test wallet ${name}`);
     return chain;
   }
+
   export async function make ({ kv, amount = 1, price = 1 }) {
     await kv.atomic().mutate({ type: 'sum', key: ["made", price], value: amount }).commit();
     return { "made": { price, amount } }
   }
+
   export async function take ({ kv, amount = 1, price = 1 }) {
     await kv.atomic().mutate({ type: 'sum', key: ["took", price], value: amount }).commit();
     return { "took": {} }
   }
-  export const LOCALNET = {
-    chain:                       'elementsregtest',
-    acceptnonstdtxn:             true,
-    anyonecanspendaremine:       true,
-    bech32_hrp:                  'tex',
-    blech32_hrp:                 'tlq',
-    blindedprefix:               23,
-    blindedaddresses:            true,
-    con_blocksubsidy:            0,
-    con_connect_genesis_outputs: true,
-    con_elementsmode:            true,
-    defaultpeggedassetname:      'bitcoin',
-    discover:                    false,
-    dnsseed:                     false,
-    evbparams:                   'simplicity:-1:::',
-    //feeasset:                    'b2e15d0d7a0c94e4e2ce0fe6e8691b9e451377f6e46e8045a86f7c4b5d4f0f23',
-    initialfreecoins:            1000000n * 100000000n,
-    initialreissuancetokens:     1n * 100000000n,
-    maxtxfee:                    100.0,
-    persistmempool:              false,
-    pubkeyprefix:                36,
-    rest:                        true,
-    rpcallowip:                  '127.0.0.1',
-    rpcpassword:                 'fadroma',
-    rpcport:                     8941,
-    rpcuser:                     'fadroma',
-    scriptprefix:                13,
-    server:                      true,
-    //subsidyasset:                'b2e15d0d7a0c94e4e2ce0fe6e8691b9e451377f6e46e8045a86f7c4b5d4f0f23',
-    txindex:                     true,
-    validatepegin:               false,
-    vbparams:                    "taproot:1:1",
-  };
 
   export async function shutdown ({ debug, kv, listener, localnet }) {
     if (typeof kv?.close === 'function') {
@@ -149,4 +192,5 @@ namespace Server {
       debug('Stopped localnet');
     }
   }
+
 }
