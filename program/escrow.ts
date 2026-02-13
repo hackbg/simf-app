@@ -9,15 +9,25 @@ interface Escrow {
   consume (_: Escrow.Consume): Promise<unknown>
 }
 
-function Escrow (): Escrow {
+function Escrow ({
+  sender    = undefined,
+  recipient = undefined,
+  condition = undefined,
+  timeout   = undefined,
+} = {}): Escrow {
+  const program = Escrow.Program({
+    sender,
+    recipient,
+    condition,
+    timeout
+  });
   return {
     async deploy  ({ price, amount, timeout }) {
-      console.log({deploy:{price, amount, timeout}});
-      const program = Escrow.Program({ sender, recipient, condition, timeout });
+      console.log({program, deploy:{price, amount, timeout}});
       console.log(program);
     },
     async consume ({ price, amount }) {
-      console.log({consume:{price, amount}})
+      console.log({program, consume:{price, amount}})
     },
   }
 }
@@ -89,9 +99,10 @@ namespace Escrow {
   }
 
   export function Cli ({ args, exit }) {
+    const program = Escrow({})
     switch (args[0]) {
-      case 'deploy':  return Escrow().deploy({ price: args[1], amount: args[2] })
-      case 'consume': return Escrow().consume({ price: args[1], amount: args[2] })
+      case 'deploy':  return program.deploy({ price: args[1], amount: args[2], timeout: args[3] })
+      case 'consume': return program.consume({ price: args[1], amount: args[2] })
       default: console.error('Invalid invocation.'); exit(1)
     }
   }
