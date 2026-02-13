@@ -15,7 +15,7 @@ wasm:
 
 # Typecheck the source code
 check:
-  deno check -P program/*.ts service/*.ts
+  deno check --allow-import program/*.ts service/*.ts
 
 # Run the application's test suite
 test:
