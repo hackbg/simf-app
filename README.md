@@ -16,71 +16,64 @@ parameterized over the data attested by the oracle.
 
 ## Install
 
-A container build is in the works. Meanwhile, setup is manual:
+Package and container builds are in the works. Meanwhile, you can obtain
+the project via **Git checkout**:
 
-### Obtain the source
-
-Clone the repository with submodules:
-
-```
+```sh
 git clone --recursive https://github.com/hackbg/simf-app
 cd simf-app
+just -l
 ```
 
-> ☝️ If you forgot `--recursive` - don't worry, it happens all the time.
+> ☝️ If you forgot `--recursive`, don't worry. It happens all the time.
 >
 > Run `git submodule update --init --recursive` in the root of the repo
-> to initialize all Git submodules.
+> to **initialize all Git submodules**.
 
 ### Dependencies
 
-If you have Nix and Direnv, run `direnv allow` in repo to provide
-minimum necessary tooling (**Just**, **Deno**, **Podman**) as defined in `shell.nix`.
+If you already have **Nix (unstable channel)** and **Direnv**, just run `direnv allow` in the repo.
 
-Also required (and currently not automatically provided) is **Elements**.
+This will bootstrap minimum necessary tooling (**Just**, **Deno**, **Podman**, **Elements**),
+as defined in `shell.nix`.
 
-> ☝️ Elements in Nixpkgs as of last test does not support Simplicity.
+> ☝️ The `shell.nix` does not attempt to provide a **Rust toolchain**.
 >
-> It's [easy to build a compatible version with Nix](https://github.com/hackbg/fadroma/blob/9a33722bc54ace7bda4f6ed28d48bdce1979ae18/shell.nix#L33-L41)
-> but may compile for a long time, which is not a good first run experience.
+> Uncomplicated use of **`rustup` under Nix** may involve incompatible Clang versions
+> at different stages - which may build the WASM with the **Simplicity Jets silently missing**.
 >
-> For now, have a look at the [official (static) binaries](https://github.com/ElementsProject/elements/releases/tag/elements-23.3.1) instead.
-
-Neither does the `shell.nix` attempt to provide a **Rust toolchain**.
-
-> ☝️ Rust/Clang toolchain provided by `rustup` plus Nix may build an incompatible WASM.
->
-> We recommend users of that combination to build in the provided container as described below.
+> That's why we recommend users build the WASM in the provided container - as described below.
 
 ### Build the WASM
 
-SimplicityHL operations are performed by a WASM component,
-defined by the submodule-of-submodule `fadroma/platform/SimplicityHL`.
-You will need to compile it with:
+SimplicityHL operations are performed by a **WASM module**, `fadroma/platform/SimplicityHL`.
 
-```
+Before first run, you will need to compile this with:
+
+```sh
 just wasm
 ```
 
 ### Run the tests
 
-Run the test suite in `test.ts` with:
+To make sure everything is in good order, run the **test suite** in `test.ts` with:
 
-```
+```sh
 just test
 ```
 
 ### Contribute!
 
-Run `just -l` or read the `Justfile` for the full list
-of pre-defined development actions. These are meant to
-facilitate making and testin modifications to the code.
+Read the `Justfile` for the full list of DX scripts.
 
-## Launch
+These are meant to facilitate you in making and testing changes,
+and are a good starting point to becoming fluent with the codebase.
 
-The **oracle server** is started in the foreground with:
+## Operate
 
-```
+To run the **oracle API service** in the foreground:
+
+```sh
 just server --rpcurl=<RPCURL>
 ```
 
@@ -88,55 +81,71 @@ just server --rpcurl=<RPCURL>
  * This will run in the foreground, listening until termination
    at the HTTP/WS endpoint referenced below as `APIURL`.
 
-> ☝️ The special form `--rpcurl=spawn` tells the server to
+> ☝️ **The special form `--rpcurl=spawn`** tells the server to
 > run a temporary `elementsregtest` chain for local testing.
 > This requires a compatible version of `elementsd` to
 > be on your `PATH`.
 
+### API
+
+> The API endpoints are not documented yet!
+
+### OCI
+
+> The OCI container images are not documented yet!
+
+### NixOS
+
+> The NixOS production setup is not documented yet!
+
 ## Use
 
-### CLI
+To invoke the **oracle command interface**:
 
-The **oracle command interface** is invoked with:
-
-```
-just client --rpcurl=<RPCURL> --apiurl=<APIURL> <...ARGS>
+```sh
+just client --rpcurl=<RPCURL> --apiurl=<APIURL> <...COMMAND>
 ```
 
   * `RPCURL` is a chain's HTTP(S) RPC endpoint,
-  * `APIURL` is the oracle server component's HTTP/WS API endpoint.
-  * `...ARGS` is the command to send to the oracle.
+  * `APIURL` is the oracle API service's HTTP/WS API endpoint.
+  * `...COMMAND` is the command to send to the oracle.
 
-> ☝️ The special form `--apiurl=spawn` tells the client to
-> run a temporary oracle server process, which will in turn
+> ☝️ **The special form `--apiurl=spawn`** tells the client to
+> run a temporary oracle API service, which will in turn
 > conform to the value of the `--rpcurl` options.
 
 #### Locking funds
 
-> This part is not documented yet!
+> This procedure is not documented yet!
 
 #### Price attestation
 
-> This part is not documented yet!
+> This procedure is not documented yet!
 
 #### Retrieving funds
 
-> This part is not documented yet!
+> This procedure is not documented yet!
+
+### Web frontend
+
+> The webapp is not documented yet!
+
+### Desktop frontend
+
+> The desktop app is not documented yet!
 
 ### SDK
 
-> This part is not documented yet!
+This application aims to be simple enough that its constituent parts
+can be exposed to full programmatic control as a matter of course:
 
-### GUI
+```ts
+import {
+  Server, // Script the lifecycle of oracle servers
+  Client, // Script calls to oracles
+  Escrow, // Script the escrow program
+  Vault   // Script the vault program
+} from './path/to/index.ts';
 
-> This part is not documented yet!
-
-## Deploy
-
-### OCI
-
-> This part is not documented yet!
-
-### NixOS
-
-> This part is not documented yet!
+// These examples are not written yet!
+```
