@@ -31,6 +31,9 @@ release the funds.
 If you have Nix and Direnv, run `direnv allow` in repo
 to provide minimum necessary tooling (Just, Deno, Podman).
 
+Currently, you need to provide your own `elementsd` and
+`elements-cli`.
+
 Run `just -l` or read the `Justfile` for a full list
 of pre-defined development actions, such as the folloing:
 
