@@ -1,5 +1,5 @@
 #!/usr/bin/env -S deno run -P
-import type { Bitcoin } from "fadroma";
+import type { Fn, Bitcoin, Log } from "fadroma";
 import { Http } from "fadroma";
 import { Service, Flags } from './common.ts';
 
@@ -14,7 +14,7 @@ interface Server extends Service {
 }
 
 /** Run a microservice that deploys SimplicityHL programs
-  * and signs witness attestations from a price feed. */ 
+  * and signs witness attestations from a price feed. */
 async function Server ({
   log    = console.log,
   debug  = console.debug,
@@ -24,7 +24,7 @@ async function Server ({
   listen = Server.DEFAULTS.listen,
   routes = Server.ROUTES,
   router = Http.Listen(listen, routes),
-}: Server.Options = {}): Promise<Server> {
+}: Partial<Server.Options> = {}): Promise<Server> {
   debug('Starting Simplicity Oracle Server');
 
   debug('Initializing KV store...');
@@ -41,8 +41,10 @@ async function Server ({
 
   // Routes evaluate in this context:
   const context = {
-    debug, log, warn, kv, chain: localnet, listen,
-    shutdown: () => Server.shutdown(context),   
+    shutdown: () => Server.shutdown(context),
+    debug, log, warn,
+    kv, chain: localnet, localnet,
+    listen, listener: null,
     async command (...args: (string|number)[]) {
       log('Listening until process exit on', listen)
       if (args.length > 0) warn('Commands ignored:', ...args);
@@ -69,48 +71,40 @@ namespace Server {
     string: ["chain", "listen"]
   }, DEFAULTS);
 
-  const { Get, Post, readBody } = Http;
+  const { readBody, Method: { Get, Post } } = Http;
 
-  /** Routes: should we do REST style (endpoint per method)
-    * or RPC style (method name is another parameter)? */
-  export const ROUTES = Http(
-    // RPC style:
-    Get('/',       getStatus),
-    Post('/',      postAnything),
-    // REST style:
+  /** Routes: should we do
+    * - REST style (endpoint per method)
+    * - RPC style (method name is another parameter)? */
+  export const ROUTES: Http.Handler<Context> = Http(
+    // RPC style (HTTP abstracted away):
+    Get('/',       getQuery),
+    Post('/',      postCommand),
+    // REST style (HTTP factored in):
     Get('/vault',  getDeployVaultPSET),
     Get('/attest', getAttestationWitness),
   );
 
-  export interface Options extends Log {
-    store:  Deno.Kv;
-    chain:  string;
-    listen: string;
-    routes: Http;
-    router: () => Fn.Async<HttpServer>;
-  }
-
-  export interface Context extends Http.Context {
+  /** Context available to route handlers. */
+  export interface Context extends Partial<Http.Context> {
     chain: Bitcoin;
     kv:    Deno.Kv;
   };
 
-  export async function getDeployVaultPSET (context: Context) {
-    // TODO: this deploys the vault
-  }
-
-  export async function getAttestationWitness (context: Context) {
-    // TODO: this provides the price attestation
-  }
-
-  export async function getStatus ({ req, kv, chain }: Context) {
+  /** Respont to status GET.
+    *
+    * If going with RPC style routes, parameterize here to serve other things. */
+  export async function getQuery ({ req, kv, chain }: Context) {
     await chain.rpc.rescanblockchain();
     const { balance } = await chain.rpc.getwalletinfo();
     const orders = (await kv.list({ prefix: ["orders"] })).value || [];
     return { status: { balance, orders } };
   }
 
-  export async function postAnything ({ req, kv }: Context) {
+  /** Respond to POST.
+    *
+    * TODO: Replace example command dispatch with POST API matching the [Client]. */
+  export async function postCommand ({ req, kv }: Context) {
     const body = JSON.parse(await readBody(req));
     if (Object.keys(body).length == 1) {
       if (body.make) return await make({ ...body.make, kv });
@@ -118,61 +112,32 @@ namespace Server {
     }
     throw Object.assign(new Error('make or take'), { http: 400 })
   }
-
-  export async function regtestSetup ({ debug }) {
-    debug('Starting Elements localnet')
-    const { Bitcoin } = await import('fadroma');
-    const chain = await Bitcoin({
-      chain:                       'elementsregtest',
-      acceptnonstdtxn:             true,
-      anyonecanspendaremine:       true,
-      bech32_hrp:                  'tex',
-      blech32_hrp:                 'tlq',
-      blindedprefix:               23,
-      blindedaddresses:            true,
-      con_blocksubsidy:            0,
-      con_connect_genesis_outputs: true,
-      con_elementsmode:            true,
-      defaultpeggedassetname:      'bitcoin',
-      discover:                    false,
-      dnsseed:                     false,
-      evbparams:                   'simplicity:-1:::',
-      //feeasset:                    'b2e15d0d7a0c94e4e2ce0fe6e8691b9e451377f6e46e8045a86f7c4b5d4f0f23',
-      initialfreecoins:            1000000n * 100000000n,
-      initialreissuancetokens:     1n * 100000000n,
-      maxtxfee:                    100.0,
-      persistmempool:              false,
-      pubkeyprefix:                36,
-      rest:                        true,
-      rpcallowip:                  '127.0.0.1',
-      rpcpassword:                 'fadroma',
-      rpcport:                     8941,
-      rpcuser:                     'fadroma',
-      scriptprefix:                13,
-      server:                      true,
-      //subsidyasset:                'b2e15d0d7a0c94e4e2ce0fe6e8691b9e451377f6e46e8045a86f7c4b5d4f0f23',
-      txindex:                     true,
-      validatepegin:               false,
-      vbparams:                    "taproot:1:1",
-    }) as Bitcoin;
-    debug('Started Elements localnet');
-    const name = `fadroma-${+new Date()}`;
-    debug(`Funding test wallet ${name}`);
-    await chain.rpc.createwallet(name);
-    const addr = await chain.rpc.getnewaddress(name, "bech32");
-    await chain.rpc.generatetoaddress(100, addr);
-    debug(`Funded test wallet ${name}`);
-    return chain;
-  }
-
   export async function make ({ kv, amount = 1, price = 1 }) {
     await kv.atomic().mutate({ type: 'sum', key: ["made", price], value: amount }).commit();
     return { "made": { price, amount } }
   }
-
   export async function take ({ kv, amount = 1, price = 1 }) {
     await kv.atomic().mutate({ type: 'sum', key: ["took", price], value: amount }).commit();
     return { "took": {} }
+  }
+
+  export interface Options extends Log {
+    store:  Fn.Async<Deno.Kv>;
+    chain:  string;
+    listen: string;
+    routes: Http.Handler;
+    router: Fn<[unknown], Fn.Async<Http.Server>>;
+  }
+
+  /** TODO: REST method serves TX for deploying the vault.
+    * TODO: or should it be POST and broadcast on its own? */
+  export async function getDeployVaultPSET ({ req, kv, chain }: Context) {
+    // TODO: this deploys the vault
+  }
+
+  /** TODO: Most of the unknowns are here. */
+  export async function getAttestationWitness ({ req, kv, chain }: Context) {
+    // TODO: this provides the price attestation
   }
 
   export async function shutdown ({ debug, kv, listener, localnet }) {
@@ -191,6 +156,20 @@ namespace Server {
       await localnet.kill();
       debug('Stopped localnet');
     }
+  }
+
+  export async function regtestSetup ({ debug }) {
+    debug('Starting Elements localnet')
+    const { Bitcoin } = await import('fadroma');
+    const chain = await Bitcoin.ElementsRegtest() as Bitcoin;
+    debug('Started Elements localnet');
+    const name = `fadroma-${+new Date()}`;
+    debug(`Funding test wallet ${name}`);
+    await chain.rpc.createwallet(name);
+    const addr = await chain.rpc.getnewaddress(name, "bech32");
+    await chain.rpc.generatetoaddress(100, addr);
+    debug(`Funded test wallet ${name}`);
+    return chain;
   }
 
 }
