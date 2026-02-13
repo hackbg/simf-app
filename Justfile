@@ -32,14 +32,14 @@ test-fadroma:
 # Run the command-line client
 client +ARGS='':
   #!/usr/bin/env bash
-  set -ueo pipefail
-  {{DENO_RUN}} {{CLIENT}} --chain=http://127.0.0.1:8941 --oracle=http://127.0.0.1:8940 {{ARGS}}
+  set -xueo pipefail
+  {{DENO_RUN}} {{CLIENT}} {{ARGS}}
 
 # Run the escrow service
 server +ARGS='':
   #!/usr/bin/env bash
-  set -ueo pipefail
-  {{DENO_RUN}} {{SERVER}} --chain=spawn {{ARGS}}
+  set -xueo pipefail
+  {{DENO_RUN}} {{SERVER}} --rpcurl=spawn {{ARGS}}
 
 #BIN_PROGRAM  := "./program/escrow.ts"
 # Deposit funds as escrow program

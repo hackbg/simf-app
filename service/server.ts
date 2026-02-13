@@ -1,14 +1,12 @@
 #!/usr/bin/env -S deno run -P
 import type { Fn, Bitcoin, Log } from "fadroma";
 import { Http } from "fadroma";
-import { Service, Flags } from './common.ts';
+import { Service, FLAGS, DEFAULTS } from './common.ts';
 
-export default Service(import.meta, Server, Server.FLAGS);
+export default Service(import.meta, Server, FLAGS);
 
 /** Server state. */
 interface Server extends Service {
-  /** Listen URL. */
-  listen: string,
   /** Localnet handle. */
   localnet?: Bitcoin,
 }
@@ -20,10 +18,10 @@ async function Server ({
   debug  = console.debug,
   warn   = console.warn,
   store  = Deno.openKv(),
-  chain  = Server.DEFAULTS.chain,
-  listen = Server.DEFAULTS.listen,
+  rpcurl = DEFAULTS.rpcurl,
+  apiurl = DEFAULTS.apiurl,
   routes = Server.ROUTES,
-  router = Http.Listen(listen, routes),
+  router = Http.Listen(apiurl, routes),
 }: Partial<Server.Options> = {}): Promise<Server> {
   debug('Starting Simplicity Oracle Server');
 
@@ -33,43 +31,32 @@ async function Server ({
   // For testing, the server can boot a localnet in `elementsregtest` mode.
   // This requires a compatible `elementsd` to be present on the system `PATH`.
   let localnet: Bitcoin;
-  if (chain === 'spawn') {
+  if (rpcurl === 'spawn') {
     localnet = await Server.regtestSetup({ debug });
   } else {
-    debug(`Using chain ${chain}`);
+    debug(`Using chain ${rpcurl}`);
   }
 
-  // Routes evaluate in this context:
+  // The following definitions are available to routes:
   const context = {
     shutdown: () => Server.shutdown(context),
     debug, log, warn,
     kv, chain: localnet, localnet,
-    listen, listener: null,
+    apiurl, rpcurl, listener: null,
     async command (...args: (string|number)[]) {
-      log('Listening until process exit on', listen)
+      log('Listening until process exit on', apiurl)
       if (args.length > 0) warn('Commands ignored:', ...args);
       await new Promise(()=>{});
     },
   };
 
-  // Run the HTTP router with the context:
-  const listener = await router(context);
-
-  // Add the listener itself to the context,
+  // Run the HTTP router with the context,
+  // add the listener itself to the context,
   // and return the whole thing:
-  return Object.assign(context, { listener });
+  return Object.assign(context, { listener: await router(context) });
 }
 
 namespace Server {
-
-  export const DEFAULTS = {
-    chain:  'http://127.0.0.1:8941',
-    listen: 'http://127.0.0.1:8940',
-  };
-
-  export const FLAGS = Flags({
-    string: ["chain", "listen"]
-  }, DEFAULTS);
 
   const { readBody, Method: { Get, Post } } = Http;
 
@@ -86,7 +73,7 @@ namespace Server {
   );
 
   /** Context available to route handlers. */
-  export interface Context extends Partial<Http.Context> {
+  export interface Context extends Http.Context {
     chain: Bitcoin;
     kv:    Deno.Kv;
   };
@@ -122,11 +109,11 @@ namespace Server {
   }
 
   export interface Options extends Log {
-    store:  Fn.Async<Deno.Kv>;
-    chain:  string;
-    listen: string;
     routes: Http.Handler;
     router: Fn<[unknown], Fn.Async<Http.Server>>;
+    store:  Fn.Async<Deno.Kv>;
+    rpcurl: string;
+    apiurl: string;
   }
 
   /** TODO: REST method serves TX for deploying the vault.
@@ -140,21 +127,21 @@ namespace Server {
     // TODO: this provides the price attestation
   }
 
-  export async function shutdown ({ debug, kv, listener, localnet }) {
+  export async function shutdown ({ debug, kv, listener, chain }) {
     if (typeof kv?.close === 'function') {
       debug('Stopping KV store');
       await kv.close();
       debug('Stopped KV store');
     }
-    if (typeof listener?.close() === 'function') {
+    if (typeof listener?.close === 'function') {
       debug('Stopping listener');
       await listener.close();
       debug('Stopped listener');
     }
-    if (typeof localnet?.kill === 'function') {
-      debug('Stopping localnet');
-      await localnet.kill();
-      debug('Stopped localnet');
+    if (typeof chain?.kill === 'function') {
+      debug('Stopping chain');
+      await chain.kill();
+      debug('Stopped chain');
     }
   }
 

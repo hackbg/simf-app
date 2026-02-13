@@ -4,6 +4,8 @@ import { Fn, Log } from "fadroma";
 export interface Service {
   shutdown: () => Promise<void>,
   command: (...args: (string|number)[]) => Promise<unknown>,
+  apiurl: string|URL
+  rpcurl: string|URL
 }
 
 /** Define CLI entrypoint. */
@@ -32,8 +34,17 @@ export function Service (
   return main;
 }
 
+export const DEFAULTS = {
+  rpcurl: 'http://127.0.0.1:8941',
+  apiurl: 'http://127.0.0.1:8940',
+};
+
+export const FLAGS = defineFlags(
+  { string: ["rpcurl", "apiurl"] }, DEFAULTS
+);
+
 /** Add custom command-line flags to set of default ones. */
-export function Flags <T extends object> (custom?: {
+function defineFlags <T extends object> (custom?: {
   boolean?:   string[],
   string?:    string[],
   negatable?: string[],
