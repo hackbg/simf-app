@@ -18,24 +18,30 @@ async function Client ({
   apiurl = DEFAULTS.apiurl,
 } = {}): Promise<Client> {
   debug('Starting Simplicity Oracle Client');
+
+  // Automatically spawn localnet if requested
   let server = null;
   if (apiurl === 'spawn') {
     const { default: Server } = await import('./server.ts');
     server = await Server({ color, log, debug, rpcurl });
     apiurl = server.listen;
   }
+
   return {
     command,
     shutdown,
     apiurl,
     rpcurl,
   }
+
   async function command (..._: (string|number)[]) {
     const [command = null, ...args] = _;
     switch (command) {
       case null: {
-        log('');
         log('Fadroma v3-alpha SimplicityHL CLI');
+        log('');
+        log(`RPC: ${rpcurl}`),
+        log(`API: ${apiurl}`),
         log('');
         log('Commands:');
         log('  p2pk    program: pay to public key');
@@ -46,23 +52,38 @@ async function Client ({
         log('');
         throw new Error(`specify a command`)
       }
-      case 'deposit': {
-        throw new Error('not implemented')
-        //return console.log(await getJson());
-      }
-      case 'attest': {
-        throw new Error('not implemented')
-        //return console.log(await postJson({ make: { amount: args[0], price: args[1] } }));
-      }
-      case 'withdraw': {
-        throw new Error('not implemented')
-        //return console.log(await postJson({ take: { amount: args[0] } }));
+      case 'p2pk':
+      case 'p2pkh':
+      case 'escrow':
+      case 'vault': {
+        const [subcommand = null, ...subargs] = args;
+        switch (subcommand) {
+          case null: {
+            log('Fadroma v3-alpha SimplicityHL CLI');
+            log('');
+            log(`RPC: ${rpcurl}`),
+            log(`API: ${apiurl}`),
+            log(`Program: ${command}`);
+            log('');
+            log('Commands:');
+            log(`  list    discover ${command} instances`);
+            log(`  show    inspect ${command} program`);
+            log(`  fund    deposit ${command} funds`);
+            log(`  spend   withdraw ${command} funds`);
+            log('');
+            throw new Error(`specify a subcommand`)
+          }
+          default: {
+            throw new Error(`not implemented: ${command} ${subcommand}`)
+          }
+        }
       }
       default: {
         throw new Error(`not implemented: ${command}`)
       }
     }
   }
+
   async function shutdown () {
     if (server) {
       debug('Stopping local oracle');
@@ -70,12 +91,15 @@ async function Client ({
       debug('Stopped local oracle');
     }
   }
+
   async function getJson () {
     return await (await fetch(new URL(apiurl))).json();
   }
+
   async function postJson (body: unknown) {
     return await (await fetch(new URL(apiurl), {
       method: 'post', body: JSON.stringify(body)
     })).json();
   }
+
 }
