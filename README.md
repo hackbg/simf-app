@@ -1,7 +1,7 @@
 # SimplicityHL Vault/Escrow/Oracle Prototype
 
 This is an example project powered by the
-experimental WASM-based SimplicityHL support
+[experimental WASM-based SimplicityHL support](https://github.com/hackbg/simf)
 in [Fadroma](https://github.com/hackbg/fadroma),
 the cross-chain framework by [Hack.bg](https://hack.bg).
 
@@ -13,9 +13,6 @@ about the value of an external datum, such as the exchange price of a given toke
 The **vault** is a SimplicityHL program which holds a certain amount of funds.
 Its balance can be transferred by fulfilling the program's condition, which is
 parameterized over the data attested by the oracle.
-
-Now building the elementar vault: one which allows the holder of the attestation
-to purchase a number of tokens proportional to the attested price.
 
 ## Install
 
