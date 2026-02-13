@@ -1,6 +1,6 @@
 #!/usr/bin/env -S just -f
 
-DENO_RUN := "deno run --unstable-kv --allow-run=$(which elementsd)"
+DENO_RUN := "deno run -P --unstable-kv --allow-run=$(which elementsd)"
 CLIENT   := "./service/client.ts"
 SERVER   := "./service/server.ts"
 
@@ -13,9 +13,13 @@ usage:
 wasm:
   cd fadroma/platform/SimplicityHL && just wasm
 
+# Typecheck the source code
+check:
+  deno check -P program/*.ts service/*.ts
+
 # Run the application's test suite
 test:
-  deno test --no-check test.ts
+  deno test -P --no-check test.ts
 
 # Run the platform integration test suite
 test-simf:
@@ -24,10 +28,6 @@ test-simf:
 # Run the framework test suite
 test-fadroma:
   cd fadroma && just test
-
-# Typecheck the source code
-check:
-  deno check program/*.ts service/*.ts
 
 # Run the command-line client
 client +ARGS='':
