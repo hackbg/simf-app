@@ -79,15 +79,18 @@ just server --chain=<RPCURL>
  * This will run in the foreground, listening until termination
    at the HTTP/WS endpoint referenced below as `APIURL`.
 
-> ☝️ If you don't provide `RPCURL`, it will default to `spawn`.
->
-> `--chain=spawn` tells the server to run a temporary
-> `elementsregtest` chain for local testing.
->
+> ☝️ The special form `--chain=spawn` tells the server to
+> run a temporary `elementsregtest` chain for local testing.
 > This requires a compatible version of `elementsd` to
 > be on your `PATH`.
 
 ### Orchestration
+
+#### OCI
+
+> This part is not documented yet!
+
+#### NixOS
 
 > This part is not documented yet!
 
@@ -105,10 +108,9 @@ just client --chain=<RPCURL> --oracle=<APIURL> <...ARGS>
   * `APIURL` is the oracle server component's HTTP/WS API endpoint.
   * `...ARGS` is the command to send to the oracle.
 
-> ☝️ If you don't provide `APIURL`, it will default to `spawn`.
->
-> `--oracle=spawn` will run a temporary oracle server,
-> which will in turn conform to the `--chain` value.
+> ☝️ The special form `--oracle=spawn` tells the client to
+> run a temporary oracle server process, which will in turn
+> conform to the value of the `--chain` options.
 
 #### Locking funds
 
@@ -123,5 +125,9 @@ just client --chain=<RPCURL> --oracle=<APIURL> <...ARGS>
 > This part is not documented yet!
 
 ### SDK
+
+> This part is not documented yet!
+
+### GUI
 
 > This part is not documented yet!
