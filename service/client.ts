@@ -1,17 +1,18 @@
 #!/usr/bin/env -S deno run
 import { Service, Flags } from './common.ts';
-const FLAGS = Flags({ string: ["chain", "oracle"] }, {
-  oracle: 'http://127.0.0.1:8940',
-  chain:  'http://127.0.0.1:8941',
-});
-export default Service(import.meta, Client, FLAGS);
-interface Client extends Service { server?: Service }
+
+export default Service(import.meta, Client, Client.FLAGS);
+
+interface Client extends Service {
+  server?: Service
+}
+
 async function Client ({
   color  = true,
   log    = console.log,
   debug  = console.debug,
-  chain  = FLAGS.default!.chain!,
-  oracle = FLAGS.default!.oracle!,
+  chain  = Client.FLAGS.default!.chain!,
+  oracle = Client.FLAGS.default!.oracle!,
 } = {}): Promise<Client> {
   debug('Starting Simplicity Oracle Client');
   let server = null;
@@ -45,4 +46,13 @@ async function Client ({
   async function postJson (body: unknown) {
     return await (await fetch(new URL(oracle), { method: 'post', body: JSON.stringify(body) })).json();
   }
+}
+
+namespace Client {
+  export const FLAGS = Flags({
+    string: ["chain", "oracle"]
+  }, {
+    oracle: 'http://127.0.0.1:8940',
+    chain:  'http://127.0.0.1:8941',
+  });
 }

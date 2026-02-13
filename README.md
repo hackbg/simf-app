@@ -28,7 +28,13 @@ release the funds.
 
 ### Development
 
-See `Justfile` or run `just -l` for DX overview.
+For testing, try this:
+
+```
+just client --chain=spawn --oracle=spawn
+```
+
+Run `just -l` or read the `Justfile` for DX overview.
 
 If you have Nix and Direnv, run `direnv allow` in repo
 to provide minimum necessary tooling (Just, Deno, Podman).

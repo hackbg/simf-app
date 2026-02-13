@@ -4,9 +4,9 @@ ALLOW_IMPORT := "--allow-import=cdn.skypack.dev:443,deno.land:443,jsr.io:443"
 ALLOW_ENV    := "--allow-env=FADROMA_SIMF_WASM,FADROMA_SIMF_WRAP,TERM_PROGRAM,TMPDIR,TMP,TEMP,NODE_V8_COVERAGE,COLUMNS"
 ALLOW_FS     := "--allow-read=. --allow-write=/tmp/fadroma"
 ALLOW_RUN    := "--allow-run=$(which elementsd)"
-BIN_PROGRAM  := "./src/escrow.ts"
-BIN_SERVER   := "./src/server.ts"
-BIN_CLIENT   := "./src/client.ts"
+BIN_PROGRAM  := "./program/escrow.ts"
+BIN_SERVER   := "./service/server.ts"
+BIN_CLIENT   := "./service/client.ts"
 
 # Display available commands
 [private]
@@ -52,10 +52,14 @@ test-client:
 test:
   deno test {{ALLOW_FS}} {{ALLOW_IMPORT}} {{ALLOW_ENV}} --no-check test.ts
 
-# Run the framework's test suite
+# Run the platform integration test suite
+test-simf:
+  cd fadroma/platform/SimplicityHL && just test
+
+# Run the framework test suite
 test-fadroma:
   cd fadroma && just test
 
 # Typecheck the project
 check:
-  deno check {{ALLOW_IMPORT}} src/*.ts
+  deno check {{ALLOW_IMPORT}} program/*.ts service/*.ts
