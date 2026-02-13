@@ -24,10 +24,13 @@ Clone the repository with submodules:
 
 ```
 git clone --recursive https://github.com/hackbg/simf-app
+cd simf-app
 ```
 
-> ☝️ If you forget `--recursive`, use `git submodule update --init --recursive`
-> to initialize the Git submodules:
+> ☝️ If you forgot `--recursive` - don't worry, it happens all the time.
+>
+> Run `git submodule update --init --recursive` in the root of the repo
+> to initialize all Git submodules.
 
 ### Dependencies
 
@@ -35,10 +38,19 @@ If you have Nix and Direnv, run `direnv allow` in repo to provide
 minimum necessary tooling (**Just**, **Deno**, **Podman**) as defined in `shell.nix`.
 
 Also required (and currently not automatically provided) is **Elements**.
+
+> ☝️ Elements in Nixpkgs as of last test does not support Simplicity.
+>
+> It's [easy to build a compatible version with Nix](https://github.com/hackbg/fadroma/blob/9a33722bc54ace7bda4f6ed28d48bdce1979ae18/shell.nix#L33-L41)
+> but may compile for a long time, which is not a good first run experience.
+>
+> For now, have a look at the [official (static) binaries](https://github.com/ElementsProject/elements/releases/tag/elements-23.3.1) instead.
+
 Neither does the `shell.nix` attempt to provide a **Rust toolchain**.
 
-> ☝️ This is because Elements in Nixpkgs as of last test does not support Simplicity;
-> Rust/Clang toolchain provided by `rustup` under Nix may build an incompatible WASM.
+> ☝️ Rust/Clang toolchain provided by `rustup` plus Nix may build an incompatible WASM.
+>
+> We recommend users of that combination to build in the provided container as described below.
 
 ### Build the WASM
 
