@@ -9,6 +9,10 @@ in sh "oracle" [
   pkgs.deno
   pkgs.just
   pkgs.podman
-  #pkgs.podman-compose
 
-] {}
+] {
+
+  # Used by Justfile
+  DOCKER = "podman";
+
+}
