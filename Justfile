@@ -16,7 +16,7 @@ usage:
 
 # Build the WASM binary
 wasm:
-  cd fadroma && just wasm-simf
+  cd fadroma/platform/SimplicityHL && just wasm
 
 # Deposit funds as escrow program
 deploy price="1" amount="1":
