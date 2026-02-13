@@ -1,8 +1,21 @@
 {
   "unstable": [ "kv" ],
-  "lint": { "rules": { "exclude": [ "no-namespace" ] } },
+  "lint": {
+    "rules": {
+      "exclude": [ "no-namespace" ]
+    }
+  },
   "imports": {
     "env":     "./stub.ts",
     "fadroma": "./fadroma/index.ts"
+  },
+  "permissions": {
+    "default": {
+      "read":   ["."],
+      "write":  ["/tmp/fadroma"],
+      "import": ["cdn.skypack.dev:443", "deno.land:443", "jsr.io:443"],
+      "env":    ["FADROMA_SIMF_WASM", "FADROMA_SIMF_WRAP", "TERM_PROGRAM", "TMPDIR", "TMP", "TEMP",
+                 "NODE_V8_COVERAGE", "COLUMNS"]
+    }
   }
 }
