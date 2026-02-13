@@ -2,7 +2,7 @@
   "unstable": [ "kv" ],
   "lint": { "rules": { "exclude": [ "no-namespace" ] } },
   "imports": {
-    "env":     "./src/wasm_env.ts",
+    "env":     "./stub.ts",
     "fadroma": "./fadroma/index.ts"
   }
 }
