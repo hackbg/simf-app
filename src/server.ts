@@ -1,15 +1,17 @@
 #!/usr/bin/env -S deno run
-import { Buffer } from 'node:buffer';
-import { Http, Port } from "fadroma";
-import type { Btc } from "fadroma";
+import type { Bitcoin } from "fadroma";
+import { Http } from "fadroma";
 import { Service, Flags } from './common.ts';
 export default Service(import.meta, Server, Server.FLAGS);
+/** Server state. */
 interface Server extends Service {
   /** Listen URL. */
   listen: string,
   /** Localnet handle. */
-  localnet?: Btc,
+  localnet?: Bitcoin,
 }
+/** Run a microservice that deploys SimplicityHL programs
+  * and signs witness attestations from a price feed. */ 
 async function Server ({
   log    = console.log,
   debug  = console.debug,
@@ -23,65 +25,49 @@ async function Server ({
   debug('Initializing KV store...');
   const kv: Deno.Kv = await store;
   debug('Starting Simplicity Oracle Server');
-  let localnet: Btc;
+  // For testing, the server can boot a localnet in `elementsregtest` mode.
+  // This requires a compatible `elementsd` to be present on the system `PATH`.
+  let localnet: Bitcoin;
   if (chain === 'spawn') {
-    debug('Starting Elements localnet')
-    const { Btc } = await import('fadroma');
-    localnet = await Btc(Server.LOCALNET);
-    debug('Started Elements localnet');
+    localnet = await Server.regtestSetup({ debug });
   } else {
     debug(`Using chain ${chain}`);
   }
-  const listener = await router({ warn, log, debug, kv, chain: localnet });
-  return { listen, localnet, command, teardown };
-  async function command (...args: (string|number)[]) {
-    log('Listening until process exit on', listen)
-    if (args.length > 0) warn('Commands ignored:', ...args);
-    await new Promise(()=>{});
-  }
-  async function teardown () {
-    if (typeof kv?.close === 'function') {
-      debug('Stopping KV store');
-      await kv.close();
-      debug('Stopped KV store');
-    }
-    if (typeof listener?.close() === 'function') {
-      debug('Stopping listener');
-      await listener.close();
-      debug('Stopped listener');
-    }
-    if (typeof localnet?.kill === 'function') {
-      debug('Stopping localnet');
-      await localnet.kill();
-      debug('Stopped localnet');
-    }
-  }
+  // Routes evaluate in this context:
+  const context = {
+    debug, log, warn, kv, chain: localnet, listen,
+    shutdown: () => Server.shutdown(context),   
+    async command (...args: (string|number)[]) {
+      log('Listening until process exit on', listen)
+      if (args.length > 0) warn('Commands ignored:', ...args);
+      await new Promise(()=>{});
+    },
+  };
+  // Add the listener itself to the context:
+  return Object.assign(context, { listener: await router(context) });
 }
 namespace Server {
   const decoder = new TextDecoder();
-  export interface Context extends Http.Context {
-    kv: Deno.Kv;
-    chain: Btc;
+  const { Get, Post, readBody } = Http;
+  export type  Context  = Http.Context & { chain: Bitcoin; kv: Deno.Kv; };
+  export const DEFAULTS = { chain: 'http://127.0.0.1:8941', listen: 'http://127.0.0.1:8940', };
+  export const FLAGS    = Flags({ string: ["chain", "listen"] }, DEFAULTS);
+  export const ROUTES   = Http(
+    Get('/',       onGET),
+    Get('/vault',  getDeployVaultPSET),
+    Get('/attest', getAttestationWitness),
+    Post('/',      onPOST));
+  export async function getDeployVaultPSET (context: Context) {
   }
-  export const DEFAULTS = {
-    listen: 'http://127.0.0.1:8940',
-    chain:  'http://127.0.0.1:8941',
-  };
-  export const FLAGS = Flags({ string: ["chain", "listen"] }, DEFAULTS);
-  export const ROUTES = Http(
-    Http.Get('/',  query),
-    Http.Post('/', transact));
-  export async function query ({ req, kv, chain }: Context) {
-    const name = `fadroma-${+new Date()}`;
-    await chain.rpc.createwallet(name);
-    const addr = await chain.rpc.getnewaddress(name, "bech32");
-    await chain.rpc.generatetoaddress(100, addr);
+  export async function getAttestationWitness (context: Context) {
+  }
+  export async function onGET ({ req, kv, chain }: Context) {
     await chain.rpc.rescanblockchain();
     const { balance } = await chain.rpc.getwalletinfo();
     const orders = (await kv.list({ prefix: ["orders"] })).value || [];
     return { status: { balance, orders } };
   }
-  export async function transact ({ req, kv }: Context) {
+  export async function onPOST ({ req, kv }: Context) {
     const body = JSON.parse(await readBody(req));
     if (Object.keys(body).length == 1) {
       if (body.make) return await make({ ...body.make, kv });
@@ -89,25 +75,26 @@ namespace Server {
     }
     throw Object.assign(new Error('make or take'), { http: 400 })
   }
-  async function make ({ kv, amount = 1, price = 1 }) {
+  export async function regtestSetup ({ debug }) {
+    debug('Starting Elements localnet')
+    const { Bitcoin } = await import('fadroma');
+    const chain = await Bitcoin(Server.LOCALNET) as Bitcoin;
+    debug('Started Elements localnet');
+    const name = `fadroma-${+new Date()}`;
+    debug(`Funding test wallet ${name}`);
+    await chain.rpc.createwallet(name);
+    const addr = await chain.rpc.getnewaddress(name, "bech32");
+    await chain.rpc.generatetoaddress(100, addr);
+    debug(`Funded test wallet ${name}`);
+    return chain;
+  }
+  export async function make ({ kv, amount = 1, price = 1 }) {
     await kv.atomic().mutate({ type: 'sum', key: ["made", price], value: amount }).commit();
     return { "made": { price, amount } }
   }
-  async function take ({ kv, amount = 1, price = 1 }) {
+  export async function take ({ kv, amount = 1, price = 1 }) {
     await kv.atomic().mutate({ type: 'sum', key: ["took", price], value: amount }).commit();
     return { "took": {} }
-  }
-  function readBody (req: Http.Request): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const data = [];
-      try {
-        req.on('error', reject);
-        req.on('data', chunk => data.push(chunk));
-        req.on('end', () => resolve(decoder.decode(Buffer.concat(data))));
-      } catch(e) {
-        reject(e);
-      }
-    })
   }
   export const LOCALNET = {
     chain:                       'elementsregtest',
@@ -142,4 +129,22 @@ namespace Server {
     validatepegin:               false,
     vbparams:                    "taproot:1:1",
   };
+
+  export async function shutdown ({ debug, kv, listener, localnet }) {
+    if (typeof kv?.close === 'function') {
+      debug('Stopping KV store');
+      await kv.close();
+      debug('Stopped KV store');
+    }
+    if (typeof listener?.close() === 'function') {
+      debug('Stopping listener');
+      await listener.close();
+      debug('Stopped listener');
+    }
+    if (typeof localnet?.kill === 'function') {
+      debug('Stopping localnet');
+      await localnet.kill();
+      debug('Stopped localnet');
+    }
+  }
 }

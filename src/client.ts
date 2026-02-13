@@ -20,7 +20,7 @@ async function Client ({
     server = await Server({ color, log, debug, chain });
     oracle = server.listen;
   }
-  return { command, teardown }
+  return { command, shutdown }
   async function command (..._: (string|number)[]) {
     const [command = 'stat', ...args] = _;
     switch (command) {
@@ -32,10 +32,10 @@ async function Client ({
       }
     }
   }
-  async function teardown () {
+  async function shutdown () {
     if (server) {
       debug('Stopping local oracle');
-      await server?.teardown();
+      await server?.shutdown();
       debug('Stopped local oracle');
     }
   }

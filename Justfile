@@ -1,7 +1,7 @@
 #!/usr/bin/env -S just -f
 
 ALLOW_IMPORT := "--allow-import=cdn.skypack.dev:443,deno.land:443,jsr.io:443"
-ALLOW_ENV    := "--allow-env=FADROMA_SIMF_WASM,FADROMA_SIMF_WRAP,TERM_PROGRAM,TMPDIR,TMP,TEMP,NODE_V8_COVERAGE"
+ALLOW_ENV    := "--allow-env=FADROMA_SIMF_WASM,FADROMA_SIMF_WRAP,TERM_PROGRAM,TMPDIR,TMP,TEMP,NODE_V8_COVERAGE,COLUMNS"
 ALLOW_FS     := "--allow-read=. --allow-write=/tmp/fadroma"
 ALLOW_RUN    := "--allow-run=$(which elementsd)"
 BIN_PROGRAM  := "./src/escrow.ts"
@@ -30,7 +30,7 @@ server +ARGS='':
   #!/usr/bin/env bash
   set -ueo pipefail
   deno run {{ALLOW_FS}} {{ALLOW_IMPORT}} {{ALLOW_ENV}} {{ALLOW_RUN}} \
-    --unstable-kv --allow-net=127.0.0.1:8940 \
+    --unstable-kv --allow-net=127.0.0.1:8940,127.0.0.1:8941 \
     {{BIN_SERVER}} --chain=spawn {{ARGS}}
 
 # Run the command-line client
@@ -38,8 +38,8 @@ client +ARGS='':
   #!/usr/bin/env bash
   set -ueo pipefail
   deno run {{ALLOW_FS}} {{ALLOW_IMPORT}} {{ALLOW_ENV}} {{ALLOW_RUN}} \
-    --unstable-kv --allow-net=127.0.0.1:8940,127.0.0.1:8941 \
-    {{BIN_CLIENT}} --chain=spawn --oracle=spawn {{ARGS}}
+    --unstable-kv --allow-net=127.0.0.1:8940 \
+    {{BIN_CLIENT}} --chain=http://127.0.0.1:8941 --oracle=http://127.0.0.1:8940 {{ARGS}}
 
 test-client:
   just client stat
@@ -50,7 +50,7 @@ test-client:
 
 # Run the application's test suite
 test:
-  deno test {{ALLOW_FS}} {{ALLOW_IMPORT}} {{ALLOW_ENV}} --no-check src/test.ts
+  deno test {{ALLOW_FS}} {{ALLOW_IMPORT}} {{ALLOW_ENV}} --no-check test.ts
 
 # Run the framework's test suite
 test-fadroma:

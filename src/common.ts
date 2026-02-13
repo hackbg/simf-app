@@ -1,15 +1,18 @@
-import { Fn, Log, Async } from "fadroma";
 import { parseArgs } from "jsr:@std/cli/parse-args";
+import { Fn, Log } from "fadroma";
+
 export interface Service {
-  teardown: () => Promise<void>,
-  command:  (...args: (string|number)[]) => Promise<unknown>,
+  shutdown: () => Promise<void>,
+  command: (...args: (string|number)[]) => Promise<unknown>,
 }
+
+/** Define CLI entrypoint. */
 export function Service (
   meta: Fn.Main.Meta,
-  main: Fn.Returns<Async<Service>>,
+  main: Fn.Returns<Fn.Async<Service>>,
   flags: Parameters<typeof parseArgs>[1]
 ) {
-  Fn.Main(meta, async function trampoline ({ args, exit }) {
+  Fn.Main(meta, async function runMain ({ args, exit }) {
     let self: Service = null as unknown as Service;
     let code = 0; // process exit code, 0 is success
     const { _, help, version, ...config } = parseArgs(args, flags);
@@ -22,12 +25,14 @@ export function Service (
       console.error(e);
       code = 1;
     } finally {
-      await self?.teardown();
+      await self?.shutdown();
       exit(code);
     }
   })
   return main;
 }
+
+/** Add custom command-line flags to set of default ones. */
 export function Flags <T extends object> (custom?: {
   boolean?:   string[],
   string?:    string[],
