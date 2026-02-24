@@ -28,7 +28,7 @@ function DetailDrawer({ entry, onClose }: { entry: AttestationResponse; onClose:
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  const sig = String(entry.witness.witness.value);
+  const sig = String(entry.witness.SIG.value);
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -130,14 +130,16 @@ export function AttestationFeed() {
             <span className="dot" />
             Price Attestations
           </span>
-          {pubkey && (
-            <span className="section-meta mono">
-              oracle {pubkey}
-            </span>
-          )}
         </div>
 
         {error && <div className="error-bar">{error}</div>}
+
+        {pubkey && (
+          <div className="field" style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)' }}>
+            <span className="field-label">Oracle public key</span>
+            <span className="field-value mono">{pubkey}</span>
+          </div>
+        )}
 
         {entries.length === 0 && !error
           ? <div className="empty">Waiting for attestations…</div>
@@ -160,7 +162,7 @@ export function AttestationFeed() {
                       const prev      = entries[globalIdx + 1]?.price ?? e.price;
                       const delta     = e.price - prev;
                       const dir       = delta !== 0 ? (delta > 0 ? 'up' : 'down') : null;
-                      const sig       = String(e.witness.witness.value);
+                      const sig       = String(e.witness.SIG.value);
                       return (
                         <tr key={e.timestamp + globalIdx} className="clickable" onClick={() => setSelected(e)}>
                           <td className="mono">{new Date(e.timestamp).toLocaleTimeString()}</td>

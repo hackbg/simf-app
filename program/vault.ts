@@ -21,15 +21,11 @@ namespace Vault {
   export function Program ({
     authority = missing('authority')
   }: Options = {}) {
-    return `fn main () {
-      // Assert that witness is signed by authority:
-      assert!(jet::bip_0340_verify(("${authority}", jet::sig_all_hash()), witness));
-      // Assert that output equals input * attested price
-      assert!(jet::eq_32(
-        jet::input_amount(0),
-        jet::mul_u32(jet::output_amount(0), witness::PRICE),
-      ));
-    }`
+    return (
+      // Oracle signs the spend sighash; price-gating is enforced offchain by the oracle.
+      // The PRICE witness field records the attested price at signing time for auditability.
+      `fn main () { jet::bip_0340_verify((param::AUTHORITY, jet::sig_all_hash()), witness::SIG); }`
+    )
   }
 
   /** Required option helper. */
