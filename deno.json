@@ -13,10 +13,10 @@
     "default": {
       "read":   ["."],
       "write":  ["/tmp/fadroma"],
-      "net":    ["127.0.0.1:8940", "127.0.0.1:8941"],
+      "net":    ["127.0.0.1:8940", "127.0.0.1:8941", "blockstream.info:443", "api.binance.com:443", "api.coingecko.com:443"],
       "import": ["cdn.skypack.dev:443", "deno.land:443", "jsr.io:443"],
       "env":    ["FADROMA_SIMF_WASM", "FADROMA_SIMF_WRAP", "TERM_PROGRAM", "TMPDIR", "TMP", "TEMP",
-                 "NODE_V8_COVERAGE", "COLUMNS"]
+                 "NODE_V8_COVERAGE", "COLUMNS", "ORACLE_PRIVKEY"]
     }
   }
 }

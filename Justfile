@@ -1,6 +1,6 @@
 #!/usr/bin/env -S just -f
 
-DENO_RUN := "deno run -P --unstable-kv --allow-run=$(which elementsd)"
+DENO_RUN := "deno run -P --unstable-kv"
 CLIENT   := "./service/client.ts"
 SERVER   := "./service/server.ts"
 
@@ -35,11 +35,11 @@ client +ARGS='':
   set -xueo pipefail
   {{DENO_RUN}} {{CLIENT}} {{ARGS}}
 
-# Run the escrow service
+# Run the escrow service (use --rpcurl=spawn to start a local elementsd)
 server +ARGS='':
   #!/usr/bin/env bash
   set -xueo pipefail
-  {{DENO_RUN}} {{SERVER}} --rpcurl=spawn {{ARGS}}
+  {{DENO_RUN}} {{SERVER}} {{ARGS}}
 
 #BIN_PROGRAM  := "./program/escrow.ts"
 # Deposit funds as escrow program

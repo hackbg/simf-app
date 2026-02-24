@@ -35,12 +35,13 @@ export function Service (
 }
 
 export const DEFAULTS = {
-  rpcurl: 'http://127.0.0.1:8941',
-  apiurl: 'http://127.0.0.1:8940',
+  rpcurl:  'http://127.0.0.1:8941',
+  apiurl:  'http://127.0.0.1:8940',
+  esplora: 'https://blockstream.info/liquidtestnet/api',
 };
 
 export const FLAGS = defineFlags(
-  { string: ["rpcurl", "apiurl"] }, DEFAULTS
+  { string: ["rpcurl", "apiurl", "esplora"] }, DEFAULTS
 );
 
 /** Add custom command-line flags to set of default ones. */

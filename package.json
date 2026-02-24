@@ -1,5 +1,9 @@
 {
   "dependencies": {
-    "@types/node": "*"
+    "@noble/curves": "^2.0.1",
+    "@scure/base": "^2.0.0",
+    "@types/node": "*",
+    "case": "^1.6.3",
+    "fflate": "^0.8.2"
   }
 }
