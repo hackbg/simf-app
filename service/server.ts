@@ -95,7 +95,7 @@ namespace Server {
     const body = JSON.parse(await readBody(req));
     if (Object.keys(body).length == 1) {
       if (body.make) return await make({ ...body.make, kv });
-      if (body.take) return await take({ ...body.make, kv });
+      if (body.take) return await take({ ...body.take, kv });
     }
     throw Object.assign(new Error('make or take'), { http: 400 })
   }
