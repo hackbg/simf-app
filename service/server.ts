@@ -225,6 +225,17 @@ namespace Server {
     source: string;
   } | null = null;
 
+  // Genesis block hash cache - constant for a given network.
+  let genesisCache: string | null = null;
+  async function fetchGenesis(esplora: string): Promise<string> {
+    if (!genesisCache) {
+      genesisCache = await fetch(`${esplora}/block-height/0`)
+        .then(r => r.text())
+        .then(s => s.trim());
+    }
+    return genesisCache;
+  }
+
   /** Compile the vault program with the oracle pubkey and return its P2TR address, CMR, and balance. */
   export async function getVaultInfo({ oraclePubkey, esplora }: Context) {
     if (!vaultCache) {
@@ -313,8 +324,9 @@ namespace Server {
       throw Object.assign(new Error('UTXO value too small to cover fee'), { http: 400 });
     }
 
-    // 5. Compute spend sighash, sign with oracle key, fetch price for PRICE witness.
-    const sighash    = (prog as unknown as { spendSighash(_: object): string }).spendSighash({ tx: txHex, amount, fee, to });
+    // 5. Fetch genesis hash, compute spend sighash, sign with oracle key, fetch price for PRICE witness.
+    const genesis    = await fetchGenesis(esplora);
+    const sighash    = (prog as unknown as { spendSighash(_: object): string }).spendSighash({ tx: txHex, amount, fee, to, genesis });
     const price      = await fetchPrice();
     const priceCents = Math.round(price * 100);
     const sigBytes   = schnorr.sign(fromHex(sighash), oracleKey);
@@ -324,7 +336,7 @@ namespace Server {
     };
 
     // 6. Build fully-signed spend transaction and return hex to client for broadcasting.
-    const spendTx = (prog as unknown as { spendTx(_: object): { hex: string } }).spendTx({ tx: txHex, amount, fee, to, witness });
+    const spendTx = (prog as unknown as { spendTx(_: object): { hex: string } }).spendTx({ tx: txHex, amount, fee, to, witness, genesis });
     return { signedHex: spendTx.hex, amount, fee, to, price };
   }
 
