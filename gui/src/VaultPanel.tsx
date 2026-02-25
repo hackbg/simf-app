@@ -4,7 +4,8 @@ import {
   fetchVaultTxs,
   fetchVaultWitness,
   requestFaucet,
-  signVaultSpend,
+  computeVaultSighash,
+  buildVaultTx,
   broadcastRawTx,
   type EsploraTransaction,
   type VaultResponse,
@@ -77,12 +78,6 @@ function IO({
   );
 }
 
-function randomSighash() {
-  const b = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(b)
-    .map((x) => x.toString(16).padStart(2, '0'))
-    .join('');
-}
 
 function formatSats(sats: number) {
   if (sats === 0) return '0 L-BTC';
@@ -189,25 +184,36 @@ export function VaultPanel({ walletAddress }: { walletAddress?: string | null })
     }
   }
 
-  // Spend witness simulation - three discrete steps
-  const [sighash, setSighash] = useState<string | null>(null);
-  const [attesting, setAttesting] = useState(false);
-  const [attestErr, setAttestErr] = useState<string | null>(null);
-  const [witnessRes, setWitnessRes] = useState<VaultWitnessResponse | null>(
-    null,
-  );
-  const [witCopied, setWitCopied] = useState(false);
+  // Spend flow — three discrete steps
+  const [sighash,    setSighash]    = useState<string | null>(null);
+  const [computing,  setComputing]  = useState(false);
+  const [computeErr, setComputeErr] = useState<string | null>(null);
+  const [attesting,  setAttesting]  = useState(false);
+  const [attestErr,  setAttestErr]  = useState<string | null>(null);
+  const [witnessRes, setWitnessRes] = useState<VaultWitnessResponse | null>(null);
+  const [witCopied,  setWitCopied]  = useState(false);
 
-  // Step 1 - simulate spendSighash() locally with a random 32-byte hash.
-  function handleGenerateSighash() {
-    setSighash(randomSighash());
+  // Step 1 (client) — compute real sighash via POST /vault/sighash.
+  async function handleComputeSighash() {
+    if (!walletAddress) return;
+    setComputing(true);
+    setComputeErr(null);
+    setSighash(null);
     setWitnessRes(null);
     setAttestErr(null);
     setBroadcastRes(null);
     setBroadcastErr(null);
+    try {
+      const { sighash: s } = await computeVaultSighash(walletAddress);
+      setSighash(s);
+    } catch (e) {
+      setComputeErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setComputing(false);
+    }
   }
 
-  // Step 2 - send the sighash to the oracle to sign.
+  // Step 2 (oracle) — send sighash to oracle for signing.
   async function handleRequestSignature() {
     if (!sighash) return;
     setAttesting(true);
@@ -222,7 +228,6 @@ export function VaultPanel({ walletAddress }: { walletAddress?: string | null })
     }
   }
 
-  // Step 3 - copy the assembled witness args to clipboard.
   function handleCopyWitness() {
     if (!witnessRes) return;
     navigator.clipboard
@@ -233,7 +238,7 @@ export function VaultPanel({ walletAddress }: { walletAddress?: string | null })
       });
   }
 
-  // Step 3 — sign (oracle) then broadcast (client)
+  // Step 3 (client) — build tx with oracle witness, then broadcast.
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastErr, setBroadcastErr] = useState<string | null>(null);
   const [broadcastRes, setBroadcastRes] = useState<{ txid: string } | null>(null);
@@ -244,7 +249,7 @@ export function VaultPanel({ walletAddress }: { walletAddress?: string | null })
     setBroadcastErr(null);
     setBroadcastRes(null);
     try {
-      const { signedHex } = await signVaultSpend(walletAddress);
+      const { signedHex } = await buildVaultTx(walletAddress, witnessRes.witness);
       const txid = await broadcastRawTx(signedHex);
       setBroadcastRes({ txid });
       refresh();
@@ -256,12 +261,13 @@ export function VaultPanel({ walletAddress }: { walletAddress?: string | null })
     }
   }
 
-  const step2Input = sighash ? `{ sighash: "${sighash}" }` : undefined;
+  const step1Input  = walletAddress ? `{ to: "${walletAddress}" }` : undefined;
+  const step2Input  = sighash ? `{ sighash: "${sighash}" }` : undefined;
   const step2Output = witnessRes
-    ? `{ SIG: { type: "Signature", value: "${String(witnessRes.witness.SIG.value)}…" },\n  PRICE: { type: "u32", value: ${witnessRes.witness.PRICE.value} } }`
+    ? `{ SIG: { type: "Signature", value: "${String(witnessRes.witness.SIG.value).slice(0, 16)}…" },\n  PRICE: { type: "u32", value: ${witnessRes.witness.PRICE.value} } }`
     : undefined;
-  const step3Input = witnessRes
-    ? `{ to: "${walletAddress ?? 'tex1…'}" }`
+  const step3Input  = witnessRes
+    ? `{ to: "${walletAddress ?? 'tex1…'}", witness: { SIG, PRICE } }`
     : undefined;
 
   return (
@@ -348,31 +354,38 @@ export function VaultPanel({ walletAddress }: { walletAddress?: string | null })
               <div className="field">
                 <span className="field-label">Spend flow</span>
                 <p className="step-flow-intro">
-                  Three sequential steps - each must complete before the next
-                  begins. Steps 1 and 3 run locally; step 2 calls the oracle
-                  server, which checks the live price before signing.
+                  The client drives the entire flow; the oracle's only role is
+                  to sign the sighash and attest to the current BTC/USD price
+                  (step 2). Steps 1 and 3 never touch the oracle key.
                 </p>
               </div>
 
               <StepCard
                 n={1}
                 actor="client"
-                title="program.spendSighash()"
-                desc="Build the unsigned spend transaction and derive the 32-byte sighash - the exact bytes the oracle must sign to authorise this withdrawal. Nothing is broadcast yet."
+                title="POST /vault/sighash"
+                desc="Fetch the vault's largest UTXO and compute the 32-byte spend sighash via spendSighash(). This is the exact value the oracle must sign to authorise this withdrawal. Nothing is broadcast."
               >
-                <IO label="input" placeholder="{ tx, amount, fee, to }" />
+                <IO
+                  label="input"
+                  value={step1Input}
+                  placeholder='{ to: "tex1…" }'
+                  live={!!walletAddress}
+                />
                 <IO
                   label="output"
-                  placeholder='"a1b2c3…" - 32-byte hex sighash'
+                  placeholder='"a1b2c3…" — 32-byte spend sighash'
                   value={sighash ? `"${sighash}"` : undefined}
-                  live
+                  live={!!sighash}
                 />
+                {computeErr && <div className="error-bar">{computeErr}</div>}
                 <button
                   className="page-btn"
                   style={{ alignSelf: 'flex-start', marginTop: 2 }}
-                  onClick={handleGenerateSighash}
+                  onClick={handleComputeSighash}
+                  disabled={!walletAddress || computing}
                 >
-                  {sighash ? 'Regenerate' : 'Generate sighash →'}
+                  {computing ? 'Computing…' : sighash ? 'Recompute →' : 'Compute sighash →'}
                 </button>
               </StepCard>
 
@@ -380,7 +393,7 @@ export function VaultPanel({ walletAddress }: { walletAddress?: string | null })
                 n={2}
                 actor="oracle"
                 title="POST /vault"
-                desc="Send the sighash to the oracle. The oracle fetches the live BTC price, signs the sighash with its private key (proving it authorised this spend at this price), and returns the witness args needed to finalise the transaction."
+                desc="Send the sighash to the oracle. The oracle checks the live BTC/USD price, signs the sighash with its Schnorr key (authorising this spend at this price), and returns the witness args {SIG, PRICE}."
               >
                 <IO
                   label="input"
@@ -408,19 +421,19 @@ export function VaultPanel({ walletAddress }: { walletAddress?: string | null })
               <StepCard
                 n={3}
                 actor="client"
-                title="POST /vault/sign → Esplora POST /tx"
-                desc="Send the recipient address to the oracle. It fetches the vault UTXOs, builds and signs the transaction, then returns the signed hex. The wallet broadcasts it directly to Liquid via Esplora."
+                title="POST /vault/tx → Esplora POST /tx"
+                desc="Submit the oracle witness to assemble the fully-signed transaction via spendTx(), then broadcast it directly to Liquid via Esplora. The oracle key is not involved."
               >
                 <IO
                   label="input"
                   value={step3Input}
-                  placeholder="{ tx, amount, fee, to, witness: { SIG, PRICE } }"
+                  placeholder='{ to: "tex1…", witness: { SIG, PRICE } }'
                   live={!!witnessRes}
                 />
                 <IO
                   label="output"
                   value={broadcastRes ? `txid: "${broadcastRes.txid}"` : undefined}
-                  placeholder="txid — confirmed on Liquid"
+                  placeholder="txid — transaction confirmed on Liquid"
                   live={!!broadcastRes}
                 />
                 <div className="broadcast-row">

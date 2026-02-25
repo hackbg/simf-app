@@ -101,23 +101,39 @@ export async function fetchVaultTxs(p2tr: string): Promise<EsploraTransaction[]>
   return res.json();
 }
 
-export interface SignResponse {
-  signedHex: string;
-  amount:    number;
-  fee:       number;
-  to:        string;
-  price:     number;
-}
-
-export async function signVaultSpend(to: string, fee_sats?: number): Promise<SignResponse> {
-  const res = await fetch('/api/vault/sign', {
+export async function computeVaultSighash(to: string, fee_sats?: number): Promise<{ sighash: string }> {
+  const res = await fetch('/api/vault/sighash', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ to, ...(fee_sats !== undefined ? { fee_sats } : {}) }),
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `Sign failed: ${res.status}`);
+    throw new Error(text || `Sighash computation failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export interface BuildTxResponse {
+  signedHex: string;
+  amount:    number;
+  fee:       number;
+  to:        string;
+}
+
+export async function buildVaultTx(
+  to: string,
+  witness: VaultWitnessResponse['witness'],
+  fee_sats?: number,
+): Promise<BuildTxResponse> {
+  const res = await fetch('/api/vault/tx', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ to, witness, ...(fee_sats !== undefined ? { fee_sats } : {}) }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Build tx failed: ${res.status}`);
   }
   return res.json();
 }

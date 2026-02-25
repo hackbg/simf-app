@@ -85,8 +85,9 @@ namespace Server {
     Get('/',                 getQuery),
     Post('/',                postCommand),
     Get('/vault',            getVaultInfo),
-    Post('/vault',           postVaultAttest),
-    Post('/vault/sign',      postVaultSign),   // signs & returns hex; client broadcasts
+    Post('/vault',           postVaultAttest),     // oracle: sign sighash, return witness
+    Post('/vault/sighash',   postVaultSighash),    // client: compute sighash from UTXO
+    Post('/vault/tx',        postVaultBuildTx),    // client: build signed tx with witness
     Get('/attest',           getAttestationWitness),
     Post('/faucet',          postFaucet),
   );
@@ -203,7 +204,7 @@ namespace Server {
       // Display-only: oracle attests to the price at this timestamp.
       // For vault spends, use POST /vault with the spend sighash instead.
       witness: {
-        PRICE: { type: 'u32', value: priceCents },
+        PRICE: { type: 'u32', value: String(priceCents) },
         SIG: { type: 'Signature', value: `0x${hex(sigBytes)}` },
       },
     };
@@ -281,63 +282,58 @@ namespace Server {
       price,
       witness: {
         SIG: { type: 'Signature', value: `0x${hex(sigBytes)}` },
-        PRICE: { type: 'u32', value: priceCents },
+        PRICE: { type: 'u32', value: String(priceCents) },
       },
     };
   }
 
-  /** Compile vault, sign with oracle key, and return the signed transaction hex.
-   *
-   * Fetches the largest UTXO on the vault address, builds the spend tx using the
-   * SimplicityHL WASM, signs it with the oracle's Schnorr key, and returns the
-   * fully-signed hex. The client is responsible for broadcasting to Esplora. */
-  export async function postVaultSign({ req, oracleKey, oraclePubkey, esplora }: Context) {
-    const { to, fee_sats = 1000 } = JSON.parse(await readBody(req));
-    if (!to || typeof to !== 'string') {
-      throw Object.assign(new Error('provide to address'), { http: 400 });
-    }
+  /** Shared setup for vault spend endpoints: fetch UTXO, compile program, derive amounts. */
+  async function vaultSpendSetup(oraclePubkey: Uint8Array, esplora: string, to: string, fee_sats: number) {
     if (!vaultCache) {
       throw Object.assign(new Error('vault not initialised — call GET /vault first'), { http: 503 });
     }
-
-    // 1. Fetch UTXOs from Esplora and pick the largest one.
     const utxos: { txid: string; vout: number; value: number }[] =
       await fetch(`${esplora}/address/${vaultCache.p2tr}/utxo`).then(r => r.json());
     if (!utxos || utxos.length === 0) {
       throw Object.assign(new Error('vault has no funded UTXOs'), { http: 400 });
     }
-    const utxo = utxos.reduce((best, u) => u.value > best.value ? u : best);
-
-    // 2. Fetch the raw funding transaction hex.
-    const txHex = await fetch(`${esplora}/tx/${utxo.txid}/hex`).then(r => r.text());
-
-    // 3. Compile vault program.
+    const utxo    = utxos.reduce((best, u) => u.value > best.value ? u : best);
+    const txHex   = await fetch(`${esplora}/tx/${utxo.txid}/hex`).then(r => r.text());
     const { SimplicityHL } = await import('fadroma');
-    const wasm      = await SimplicityHL.Wasm();
-    const authority = `0x${hex(oraclePubkey)}`;
-    const prog      = wasm.compile(VAULT_SOURCE, { args: { AUTHORITY: { type: 'Pubkey', value: authority } } });
+    const wasm    = await SimplicityHL.Wasm();
+    const prog    = wasm.compile(VAULT_SOURCE, { args: { AUTHORITY: { type: 'Pubkey', value: `0x${hex(oraclePubkey)}` } } });
+    const fee     = fee_sats / 1e8;
+    const amount  = (utxo.value - fee_sats) / 1e8;
+    if (amount <= 0) throw Object.assign(new Error('UTXO value too small to cover fee'), { http: 400 });
+    const genesis = await fetchGenesis(esplora);
+    return { prog, txHex, amount, fee, genesis };
+  }
 
-    // 4. Derive amounts (BTC floats).
-    const fee    = fee_sats / 1e8;
-    const amount = (utxo.value - fee_sats) / 1e8;
-    if (amount <= 0) {
-      throw Object.assign(new Error('UTXO value too small to cover fee'), { http: 400 });
-    }
+  /** Compute the spend sighash for the vault's largest UTXO.
+   *
+   * The client calls this to obtain the exact 32-byte value the oracle must sign.
+   * Nothing is broadcast; no oracle key is involved. */
+  export async function postVaultSighash({ req, oraclePubkey, esplora }: Context) {
+    const { to, fee_sats = 1000 } = JSON.parse(await readBody(req));
+    if (!to || typeof to !== 'string') throw Object.assign(new Error('provide to address'), { http: 400 });
+    const { prog, txHex, amount, fee, genesis } = await vaultSpendSetup(oraclePubkey, esplora, to, fee_sats);
+    const sighash = (prog as unknown as { spendSighash(_: object): string })
+      .spendSighash({ tx: txHex, amount, fee, to, genesis });
+    return { sighash };
+  }
 
-    // 5. Fetch genesis hash, compute spend sighash, sign with oracle key, fetch price for PRICE witness.
-    const genesis    = await fetchGenesis(esplora);
-    const sighash    = (prog as unknown as { spendSighash(_: object): string }).spendSighash({ tx: txHex, amount, fee, to, genesis });
-    const price      = await fetchPrice();
-    const priceCents = Math.round(price * 100);
-    const sigBytes   = schnorr.sign(fromHex(sighash), oracleKey);
-    const witness    = {
-      SIG:   { type: 'Signature', value: `0x${hex(sigBytes)}` },
-      PRICE: { type: 'u32',       value: String(priceCents) },
-    };
-
-    // 6. Build fully-signed spend transaction and return hex to client for broadcasting.
-    const spendTx = (prog as unknown as { spendTx(_: object): { hex: string } }).spendTx({ tx: txHex, amount, fee, to, witness, genesis });
-    return { signedHex: spendTx.hex, amount, fee, to, price };
+  /** Build the fully-signed spend transaction from the oracle-provided witness.
+   *
+   * The client supplies the oracle's {SIG, PRICE} witness (obtained from POST /vault)
+   * and this endpoint assembles and returns the final transaction hex for broadcasting. */
+  export async function postVaultBuildTx({ req, oraclePubkey, esplora }: Context) {
+    const { to, witness, fee_sats = 1000 } = JSON.parse(await readBody(req));
+    if (!to || typeof to !== 'string') throw Object.assign(new Error('provide to address'), { http: 400 });
+    if (!witness || typeof witness !== 'object') throw Object.assign(new Error('provide witness'), { http: 400 });
+    const { prog, txHex, amount, fee, genesis } = await vaultSpendSetup(oraclePubkey, esplora, to, fee_sats);
+    const spendTx = (prog as unknown as { spendTx(_: object): { hex: string } })
+      .spendTx({ tx: txHex, amount, fee, to, witness, genesis });
+    return { signedHex: spendTx.hex, amount, fee, to };
   }
 
   /** Request L-BTC from the Liquid testnet faucet for a given address. */
