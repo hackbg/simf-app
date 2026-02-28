@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -P
 import type { Fn, Log } from 'fadroma';
-import { Http, Bytes, Base16, Bitcoin } from 'fadroma';
+import { Http, Bytes, Base16, Bitcoin, SimplicityHL as Simf } from 'fadroma';
 import { schnorr } from 'npm:@noble/curves/secp256k1.js';
 import { Service, FLAGS, DEFAULTS } from './common.ts';
 import fetchPrice from './fetchPrice.ts';
@@ -195,8 +195,7 @@ namespace Server {
   /** Compile the vault program with the oracle pubkey and return its P2TR address, CMR, and balance. */
   export async function getVaultInfo({ oraclePubkey, esplora }: Context) {
     if (!vaultCache) {
-      const { SimplicityHL } = await import('fadroma');
-      const wasm = await SimplicityHL.Wasm();
+      const wasm = await Simf.Wasm();
       const authority = `0x${Base16.encode(oraclePubkey)}`;
       const args = { AUTHORITY: { type: 'Pubkey', value: authority } };
       const program = wasm.compile(VAULT_SOURCE, { args });
@@ -251,8 +250,7 @@ namespace Server {
     }
     const utxo    = utxos.reduce((best, u) => u.value > best.value ? u : best);
     const txHex   = await Http.fetchText(`${esplora}/tx/${utxo.txid}/hex`);
-    const { SimplicityHL } = await import('fadroma');
-    const wasm    = await SimplicityHL.Wasm();
+    const wasm    = await Simf.Wasm();
     const prog    = wasm.compile(VAULT_SOURCE, { args: { AUTHORITY: { type: 'Pubkey', value: `0x${Base16.encode(oraclePubkey)}` } } });
     const fee     = fee_sats / 1e8;
     const amount  = (utxo.value - fee_sats) / 1e8;
