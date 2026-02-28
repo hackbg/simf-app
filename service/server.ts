@@ -50,7 +50,6 @@ async function Server({
 
   // The following definitions are available to routes:
   const context = {
-    shutdown: () => Server.shutdown(context),
     debug,
     log,
     warn,
@@ -63,11 +62,28 @@ async function Server({
     oracleKey,
     oraclePubkey,
     listener: null,
-    async command(...args: (string | number)[]) {
+    async command (...args: (string | number)[]) {
       log('Listening until process exit on', apiurl);
       if (args.length > 0) warn('Commands ignored:', ...args);
       await new Promise(() => {});
     },
+    async shutdown ({ debug, kv, listener, chain }) {
+      if (typeof kv?.close === 'function') {
+        debug('Stopping KV store');
+        await kv.close();
+        debug('Stopped KV store');
+      }
+      if (typeof listener?.close === 'function') {
+        debug('Stopping listener');
+        await listener.close();
+        debug('Stopped listener');
+      }
+      if (typeof chain?.kill === 'function') {
+        debug('Stopping chain');
+        await chain.kill();
+        debug('Stopped chain');
+      }
+    }
   };
 
   // Run the HTTP router with the context,
@@ -202,13 +218,12 @@ namespace Server {
   export async function getVaultInfo({ oraclePubkey, esplora }: Context) {
     if (!vaultCache) {
       const wasm = await Simf.Wasm();
-      const authority = `0x${Base16.encode(oraclePubkey)}`;
       const args = authorityArgs(oraclePubkey);
       const program = wasm.compile(VAULT_SOURCE, { args });
       const { cmr, p2tr, source } = ((program as unknown) as {
         toJSON(): { cmr: string; p2tr: string; source: string };
       }).toJSON();
-      vaultCache = { cmr, p2tr, authority: authority.slice(2), source: source || VAULT_SOURCE };
+      vaultCache = { cmr, p2tr, authority: Base16.encode(oraclePubkey), source: source || VAULT_SOURCE };
     }
     // Fetch balance from Esplora via UTXOs.
     // The address-level endpoint omits amount sums for Liquid (confidential tx support),
@@ -309,23 +324,6 @@ namespace Server {
     return { ...data, txid };
   }
 
-  export async function shutdown({ debug, kv, listener, chain }) {
-    if (typeof kv?.close === 'function') {
-      debug('Stopping KV store');
-      await kv.close();
-      debug('Stopped KV store');
-    }
-    if (typeof listener?.close === 'function') {
-      debug('Stopping listener');
-      await listener.close();
-      debug('Stopped listener');
-    }
-    if (typeof chain?.kill === 'function') {
-      debug('Stopping chain');
-      await chain.kill();
-      debug('Stopped chain');
-    }
-  }
 
   export async function regtestSetup({ debug }) {
     debug('Starting Elements localnet');
