@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -P
 import type { Fn, Log } from 'fadroma';
-import { Http, Bitcoin } from 'fadroma';
+import { Http, Bytes, Bitcoin } from 'fadroma';
 import { schnorr } from 'npm:@noble/curves/secp256k1.js';
 import { Service, FLAGS, DEFAULTS } from './common.ts';
 
@@ -184,14 +184,8 @@ namespace Server {
     const enc = new TextEncoder();
     const priceBytes = new Uint8Array(4);
     new DataView(priceBytes.buffer).setUint32(0, priceCents, false);
-    const msgBytes = concat(
-      enc.encode(asset),
-      priceBytes,
-      enc.encode(timestamp),
-    );
-    const msgHash = new Uint8Array(
-      await crypto.subtle.digest('SHA-256', msgBytes),
-    );
+    const msgBytes = Bytes.concat([enc.encode(asset), priceBytes, enc.encode(timestamp)]);
+    const msgHash = new Uint8Array(await crypto.subtle.digest('SHA-256', msgBytes));
 
     // BIP-340 Schnorr sign
     const sigBytes = schnorr.sign(msgHash, oracleKey);
@@ -424,6 +418,7 @@ namespace Server {
     Array.from(b)
       .map((x) => x.toString(16).padStart(2, '0'))
       .join('');
+
   export const fromHex = (s: string) =>
     new Uint8Array(
       s
@@ -431,13 +426,4 @@ namespace Server {
         .match(/.{2}/g)!
         .map((x) => parseInt(x, 16)),
     );
-  export function concat(...arrays: Uint8Array[]): Uint8Array {
-    const out = new Uint8Array(arrays.reduce((n, a) => n + a.length, 0));
-    let off = 0;
-    for (const a of arrays) {
-      out.set(a, off);
-      off += a.length;
-    }
-    return out;
-  }
 }
