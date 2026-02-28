@@ -103,12 +103,11 @@ namespace Server {
 
   /** Respond to status GET using Esplora for chain tip info. */
   export async function getQuery({ kv, esplora }: Context) {
-    const [height, hash] = await Promise.all([
-      fetch(`${esplora}/blocks/tip/height`)
-        .then((r) => r.text())
-        .then(Number),
-      fetch(`${esplora}/blocks/tip/hash`).then((r) => r.text()),
+    const [height, hash]: [number, string] = await Promise.all([
+      Http.fetchText(`${esplora}/blocks/tip/height`).then(Number),
+      Http.fetchText(`${esplora}/blocks/tip/hash`),
     ]);
+    // FIXME: types say this should be iterator not array - seem to work tho?
     const orders = (await kv.list({ prefix: ['orders'] })).value || [];
     return { status: { tip: { height, hash }, orders } };
   }
@@ -124,41 +123,32 @@ namespace Server {
   }
 
   export async function make({ kv, amount = 1, price = 1 }) {
-    await kv
-      .atomic()
-      .mutate({ type: 'sum', key: ['made', price], value: amount })
-      .commit();
+    const mutation = { type: 'sum', key: ['made', price], value: amount };
+    await kv.atomic().mutate(mutation).commit();
     return { made: { price, amount } };
   }
 
   export async function take({ kv, amount = 1, price = 1 }) {
-    await kv
-      .atomic()
-      .mutate({ type: 'sum', key: ['took', price], value: amount })
-      .commit();
+    const mutation = { type: 'sum', key: ['took', price], value: amount };
+    await kv.atomic().mutate(mutation).commit();
     return { took: {} };
   }
 
   // Price cache - shared across requests, refreshed every PRICE_TTL_MS.
   let priceCache: { price: number; fetchedAt: number } | null = null;
   const PRICE_TTL_MS = 5_000;
-
   export async function fetchPrice(): Promise<number> {
     if (priceCache && Date.now() - priceCache.fetchedAt < PRICE_TTL_MS) {
       return priceCache.price;
     }
     try {
-      const res = await fetch(
-        'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT',
-      );
-      const { price } = await res.json();
+      const url = 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT';
+      const { price } = await Http.fetchJson(url);
       priceCache = { price: parseFloat(price), fetchedAt: Date.now() };
     } catch {
       // Fallback to CoinGecko
-      const res = await fetch(
-        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
-      );
-      const data = await res.json();
+      const url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
+      const { data } = await Http.fetchJson(url);
       priceCache = { price: data.bitcoin.usd, fetchedAt: Date.now() };
     }
     return priceCache!.price;
@@ -224,9 +214,7 @@ namespace Server {
   let genesisCache: string | null = null;
   async function fetchGenesis(esplora: string): Promise<string> {
     if (!genesisCache) {
-      genesisCache = await fetch(`${esplora}/block-height/0`)
-        .then(r => r.text())
-        .then(s => s.trim());
+      genesisCache = await Http.fetchText(`${esplora}/block-height/0`).then(s => s.trim());
     }
     return genesisCache;
   }
@@ -249,9 +237,7 @@ namespace Server {
     // so we sum the `value` field across all UTXOs instead.
     let balance_sats = 0;
     try {
-      const utxos: { value: number }[] = await fetch(
-        `${esplora}/address/${vaultCache.p2tr}/utxo`,
-      ).then((r) => r.json());
+      const utxos: { value: number }[] = await Http.fetchJson(`${esplora}/address/${vaultCache.p2tr}/utxo`);
       balance_sats = utxos.reduce((s, u) => s + u.value, 0);
     } catch {
       /* ignore - balance stays 0 */
@@ -286,13 +272,12 @@ namespace Server {
     if (!vaultCache) {
       throw Object.assign(new Error('vault not initialised — call GET /vault first'), { http: 503 });
     }
-    const utxos: { txid: string; vout: number; value: number }[] =
-      await fetch(`${esplora}/address/${vaultCache.p2tr}/utxo`).then(r => r.json());
+    const utxos: { txid: string; vout: number; value: number }[] = await Http.fetchJson(`${esplora}/address/${vaultCache.p2tr}/utxo`);
     if (!utxos || utxos.length === 0) {
       throw Object.assign(new Error('vault has no funded UTXOs'), { http: 400 });
     }
     const utxo    = utxos.reduce((best, u) => u.value > best.value ? u : best);
-    const txHex   = await fetch(`${esplora}/tx/${utxo.txid}/hex`).then(r => r.text());
+    const txHex   = await Http.fetchText(`${esplora}/tx/${utxo.txid}/hex`);
     const { SimplicityHL } = await import('fadroma');
     const wasm    = await SimplicityHL.Wasm();
     const prog    = wasm.compile(VAULT_SOURCE, { args: { AUTHORITY: { type: 'Pubkey', value: `0x${Base16.encode(oraclePubkey)}` } } });
@@ -336,9 +321,7 @@ namespace Server {
     if (!address || typeof address !== 'string') {
       throw Object.assign(new Error('provide address'), { http: 400 });
     }
-    const url = `https://liquidtestnet.com/api/faucet?address=${encodeURIComponent(
-      address,
-    )}&action=lbtc`;
+    const url = `https://liquidtestnet.com/api/faucet?address=${encodeURIComponent(address,)}&action=lbtc`;
     const res = await fetch(url);
     const body = await res.text();
     if (!res.ok) throw Object.assign(new Error(body), { http: res.status });
@@ -350,8 +333,7 @@ namespace Server {
       }
     })();
     // Extract the 64-char hex txid embedded in the result string.
-    const txid =
-      (data.result as string | undefined)?.match(/[0-9a-f]{64}/)?.[0] ?? null;
+    const txid = (data.result as string | undefined)?.match(/[0-9a-f]{64}/)?.[0] ?? null;
     return { ...data, txid };
   }
 
