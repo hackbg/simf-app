@@ -1,7 +1,7 @@
 //import { Err } from '../fadroma/library/Err.ts';
-import Http from '../fadroma/library/Http.ts';
-import { Esplora } from '../fadroma/platform/Bitcoin/Bitcoin.ts';
-import type { Arg } from '../fadroma/platform/SimplicityHL/SimplicityHL.ts';
+import Http from './fadroma/library/Http.ts';
+import { Esplora } from './fadroma/platform/Bitcoin/Bitcoin.ts';
+import type { Arg } from './fadroma/platform/SimplicityHL/SimplicityHL.ts';
 import { p2wpkh } from '@scure/btc-signer';
 import { pubECDSA, randomPrivateKeyBytes } from '@scure/btc-signer/utils.js';
 import React, { useEffect, useState, useCallback } from 'react';
