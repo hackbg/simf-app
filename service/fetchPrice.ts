@@ -5,7 +5,7 @@ let priceCache: { price: number; fetchedAt: number } | null = null;
 
 const PRICE_TTL_MS = 5_000;
 
-export default async function fetchPrice(): Promise<number> {
+export default async function fetchPrice (): Promise<number> {
   if (priceCache && Date.now() - priceCache.fetchedAt < PRICE_TTL_MS) {
     return priceCache.price;
   }

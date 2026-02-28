@@ -2,7 +2,7 @@
 import type { Fn, Log } from 'fadroma';
 import { Http, Bytes, Base16, Bitcoin, SimplicityHL as Simf } from 'fadroma';
 import { schnorr } from 'npm:@noble/curves/secp256k1.js';
-import { Service, FLAGS, DEFAULTS } from './common.ts';
+import { Service, FLAGS, DEFAULTS, regtestSetup } from './common.ts';
 import fetchPrice from './fetchPrice.ts';
 import * as Vault from './vault.ts';
 
@@ -16,16 +16,17 @@ interface Server extends Service {
 
 /** Run a microservice that deploys SimplicityHL programs
  * and signs witness attestations from a price feed. */
-async function Server({
-  log = console.log,
-  debug = console.debug,
-  warn = console.warn,
-  store = Deno.openKv(),
-  rpcurl = DEFAULTS.rpcurl,
-  apiurl = DEFAULTS.apiurl,
+async function Server ({
+  log     = console.log,
+  debug   = console.debug,
+  warn    = console.warn,
+  store   = Deno.openKv(),
+  chain   = DEFAULTS.chain,
+  rpcurl  = DEFAULTS.rpcurl,
+  apiurl  = DEFAULTS.apiurl,
   esplora = DEFAULTS.esplora,
-  routes = Server.ROUTES,
-  router = Http.Listen(apiurl, routes),
+  routes  = Server.ROUTES,
+  router  = Http.Listen(apiurl, routes),
 }: Partial<Server.Options> = {}): Promise<Server> {
   debug('Starting Simplicity Oracle Server');
 
@@ -38,15 +39,7 @@ async function Server({
   const oraclePubkey = schnorr.getPublicKey(oracleKey);
   debug(`Oracle pubkey: ${Base16.encode(oraclePubkey)}`);
 
-  // For testing, the server can boot a localnet in `elementsregtest` mode.
-  // This requires a compatible `elementsd` to be present on the system `PATH`.
-  let localnet: Bitcoin;
-  if (rpcurl === 'spawn') {
-    localnet = await Server.regtestSetup({ debug });
-  } else {
-    debug(`Using chain ${rpcurl}`);
-    localnet = { rpc: Bitcoin.Rpc(rpcurl) } as Bitcoin;
-  }
+  if (esplora) debug(`Using Esplora:`, esplora);
 
   // The following definitions are available to routes:
   const context = {
@@ -54,8 +47,15 @@ async function Server({
     log,
     warn,
     kv,
-    chain: localnet,
-    localnet,
+    chain,
+    localnet: await (async () => {
+      // For testing, the server can boot a localnet in `elementsregtest` mode.
+      // This requires a compatible `elementsd` to be present on the system `PATH`.
+      if (rpcurl === 'spawn') return await regtestSetup({ debug });
+      // Values other than `spawn`
+      debug(`Connecting directly to ${chain} at ${rpcurl}`);
+      return { rpc: Bitcoin.Rpc(rpcurl) } as Bitcoin;
+    }) (),
     apiurl,
     rpcurl,
     esplora,
@@ -68,19 +68,19 @@ async function Server({
       await new Promise(() => {});
     },
     async shutdown () {
-      if (typeof kv?.close === 'function') {
+      if (typeof context.kv?.close === 'function') {
         debug('Stopping KV store');
-        await kv.close();
+        await Promise.resolve(context.kv.close());
         debug('Stopped KV store');
       }
-      if (typeof listener?.close === 'function') {
+      if (typeof context.listener?.close === 'function') {
         debug('Stopping listener');
-        await listener.close();
+        await Promise.resolve(context.listener.close());
         debug('Stopped listener');
       }
-      if (typeof chain?.kill === 'function') {
+      if (typeof context.chain?.kill === 'function') {
         debug('Stopping chain');
-        await chain.kill();
+        await Promise.resolve(context.chain.kill());
         debug('Stopped chain');
       }
     }
@@ -182,7 +182,7 @@ namespace Server {
       pubkey: Base16.encode(oraclePubkey),
       // Display-only: oracle attests to the price at this timestamp.
       // For vault spends, use POST /vault with the spend sighash instead.
-      witness: Vault.signedWitness(priceCents, sigBytes),
+      witness: Vault.vaultWitness(priceCents, sigBytes),
     };
   }
 
@@ -193,19 +193,6 @@ namespace Server {
     return await Bitcoin.LiquidTestnet.callFaucet(address);
   }
 
-  export async function regtestSetup({ debug }) {
-    debug('Starting Elements localnet');
-    const { Bitcoin } = await import('fadroma');
-    const chain = (await Bitcoin.ElementsRegtest()) as Bitcoin;
-    debug('Started Elements localnet');
-    const name = `fadroma-${+new Date()}`;
-    debug(`Funding test wallet ${name}`);
-    await chain.rpc.createwallet(name);
-    const addr = await chain.rpc.getnewaddress(name, 'bech32');
-    await chain.rpc.generatetoaddress(100, addr);
-    debug(`Funded test wallet ${name}`);
-    return chain;
-  }
 
   /** Load oracle private key from ORACLE_PRIVKEY env, or generate an ephemeral one. */
   export function loadOracleKey(
