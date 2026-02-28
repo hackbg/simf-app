@@ -32,7 +32,7 @@ let vaultCache: {
 } | null = null;
 
 /** Compile the vault program with the oracle pubkey and return its P2TR address, CMR, and balance. */
-export async function getVaultInfo({ oraclePubkey, esplora }: VaultContext) {
+export async function getVaultInfo({ oraclePubkey, esplora }: Http.Context & VaultContext) {
   if (!vaultCache) {
     const wasm = await Simf.Wasm();
     const args = authorityArgs(oraclePubkey);
