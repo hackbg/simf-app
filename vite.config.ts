@@ -1,16 +1,13 @@
 import { defineConfig } from 'vite'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import react from '@vitejs/plugin-react'
-import { alias } from './fadroma/vite.config.ts';
+import { alias, polyfill } from './fadroma/vite.config.ts';
 
 export default defineConfig({
   resolve: { alias },
-  plugins: [
-    react(),
-    nodePolyfills({ include: ['process', 'path', 'util'] })
-  ],
-  build: { rollupOptions: { treeshake: 'smallest' } },
-  server: {
+  plugins: [ react(), polyfill ],
+  build:   { rollupOptions: { treeshake: 'smallest' } },
+  server:  {
     allowedHosts: ["vite.dev.hack.bg"],
     proxy: {
       '/api': {

@@ -7,6 +7,7 @@
     "allowImportingTsExtensions": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "isolatedModules": false
+    "isolatedModules": false,
+    "jsx": "react"
   }
 }

@@ -9,5 +9,23 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   </head>
-  <body><div id="root"></div><script type="module" src="frontend/main.tsx"></script></body>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import { createElement, StrictMode } from 'react'
+      import { createRoot } from 'react-dom/client'
+      import App from './frontend/App.tsx';
+      const host = document.getElementById('root');
+      try {
+        const options = {};
+        const root = createRoot(host)
+        const app = createElement(StrictMode, {}, createElement(App, options))
+        root.render(app);
+      } catch (e) {
+        console.error(e);
+        host.style.color = '#f00';
+        host.style.whiteSpace = 'pre';
+        host.innerText = e.stack;
+      }
+    </script></body>
 </html>
