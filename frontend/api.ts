@@ -1,79 +1,53 @@
-export async function fetchAddressBalance(address: string): Promise<number> {
-  const res = await fetch(
-    `https://blockstream.info/liquidtestnet/api/address/${encodeURIComponent(address)}/utxo`
-  );
-  if (!res.ok) throw new Error(`Esplora balance failed: ${res.status}`);
-  const utxos: { value: number }[] = await res.json();
-  return utxos.reduce((s, u) => s + u.value, 0);
-}
+//import { Err } from '../fadroma/library/Err.ts';
+import Http from '../fadroma/library/Http.ts';
+import { Esplora } from '../fadroma/platform/Bitcoin/Bitcoin.ts';
+import type { Arg } from '../fadroma/platform/SimplicityHL/SimplicityHL.ts';
 
-export interface StatusResponse {
-  status: {
-    tip: { height: number; hash: string };
-  };
-}
+const ESPLORA = 'https://blockstream.info/liquidtestnet/api';
+export const esplora = Esplora({ url: ESPLORA });
 
-export interface SimplicityArg {
-  type:  string;
-  value: string | number;
-}
+// FIXME filter by asset
+export const fetchAddressBalance = (address: string): Promise<number> =>
+  esplora.getAddressUtxos(address).then(utxos=>{
+    return utxos.reduce((s: number, u: { value: number }) => s + u.value, 0)
+  });
 
-export interface AttestationResponse {
+export const fetchVaultTxs = (p2tr: string): Promise<Esplora.Transaction[]> =>
+  esplora.getAddressTxs(p2tr);
+
+export const broadcastRawTx = (hex: string): Promise<string> =>
+  esplora.postTx(hex) as Promise<string>;
+
+export type StatusResponse = Awaited<ReturnType<typeof fetchStatus>>;
+
+export const fetchStatus = (): Promise<{ status: { tip: { height: number; hash: string }; }; }> =>
+  Http.fetchJson('/api/');
+
+export type AttestationResponse  = Awaited<ReturnType<typeof fetchAttestation>>;
+
+export const fetchAttestation = (): Promise<{
   timestamp: string;
   asset:     string;
   price:     number;
   pubkey:    string;
-  witness: {
-    PRICE: SimplicityArg;
-    SIG:   SimplicityArg;
-  };
-}
+  witness:   VaultWitness;
+}> =>
+  Http.fetchJson('/api/attest');
 
-export interface VaultResponse {
-  vault: {
-    cmr:          string;
-    p2tr:         string;
-    authority:    string;
-    balance_sats: number;
-    source:       string;
-  };
-}
+export type VaultResponse = Awaited<ReturnType<typeof fetchVault>>;
 
-export interface FaucetResponse {
+export const fetchVault = (): Promise<{ vault: Vault; }> =>
+  Http.fetchJson('/api/vault');
+
+export type FaucetResponse = Awaited<ReturnType<typeof requestFaucet>>;
+
+export const requestFaucet = async (address: string): Promise<{
   txid?:         string;
   result?:       string;
   balance?:      number;
   balance_amp?:  number;
   balance_test?: number;
-}
-
-export interface VaultWitnessResponse {
-  price:   number;
-  witness: {
-    SIG:   SimplicityArg;
-    PRICE: SimplicityArg;
-  };
-}
-
-export async function fetchStatus(): Promise<StatusResponse> {
-  const res = await fetch('/api/');
-  if (!res.ok) throw new Error(`GET / failed: ${res.status}`);
-  return res.json();
-}
-
-export async function fetchAttestation(): Promise<AttestationResponse> {
-  const res = await fetch('/api/attest');
-  if (!res.ok) throw new Error(`GET /attest failed: ${res.status}`);
-  return res.json();
-}
-
-export async function fetchVault(): Promise<VaultResponse> {
-  const res = await fetch('/api/vault');
-  if (!res.ok) throw new Error(`GET /vault failed: ${res.status}`);
-  return res.json();
-}
-
-export async function requestFaucet(address: string): Promise<FaucetResponse> {
+}> => {
   const res = await fetch('/api/faucet', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -86,46 +60,14 @@ export async function requestFaucet(address: string): Promise<FaucetResponse> {
   return res.json();
 }
 
-export interface EsploraTransaction {
-  txid:   string;
-  fee:    number;
-  status: { confirmed: boolean; block_height?: number; block_time?: number };
-  vout:   { value: number; scriptpubkey_address?: string }[];
-}
+export type BuildTxResponse = Awaited<ReturnType<typeof buildVaultTx>>;
 
-export async function fetchVaultTxs(p2tr: string): Promise<EsploraTransaction[]> {
-  const res = await fetch(
-    `https://blockstream.info/liquidtestnet/api/address/${encodeURIComponent(p2tr)}/txs`
-  );
-  if (!res.ok) throw new Error(`Esplora txs failed: ${res.status}`);
-  return res.json();
-}
-
-export async function computeVaultSighash(to: string, fee_sats?: number): Promise<{ sighash: string }> {
-  const res = await fetch('/api/vault/sighash', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ to, ...(fee_sats !== undefined ? { fee_sats } : {}) }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Sighash computation failed: ${res.status}`);
-  }
-  return res.json();
-}
-
-export interface BuildTxResponse {
+export const buildVaultTx = async (to: string, witness: VaultWitness, fee_sats?: number): Promise<{
   signedHex: string;
   amount:    number;
   fee:       number;
   to:        string;
-}
-
-export async function buildVaultTx(
-  to: string,
-  witness: VaultWitnessResponse['witness'],
-  fee_sats?: number,
-): Promise<BuildTxResponse> {
+}> => {
   const res = await fetch('/api/vault/tx', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -136,25 +78,46 @@ export async function buildVaultTx(
     throw new Error(text || `Build tx failed: ${res.status}`);
   }
   return res.json();
-}
+};
 
-const ESPLORA = 'https://blockstream.info/liquidtestnet/api';
+export type VaultWitnessResponse = Awaited<ReturnType<typeof fetchVaultWitness>>;
 
-export async function broadcastRawTx(hex: string): Promise<string> {
-  const res = await fetch(`${ESPLORA}/tx`, { method: 'POST', body: hex });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Broadcast failed: ${res.status}`);
-  }
-  return (await res.text()).trim();
-}
-
-export async function fetchVaultWitness(sighash: string): Promise<VaultWitnessResponse> {
+export const fetchVaultWitness = async (sighash: string): Promise<{
+  price: number; witness: VaultWitness;
+}> => {
   const res = await fetch('/api/vault', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ sighash }),
   });
   if (!res.ok) throw new Error(`POST /vault failed: ${res.status}`);
+  return res.json();
+}
+
+export type VaultWitness = {
+  SIG:   Arg;
+  PRICE: Arg;
+};
+
+export type Vault = {
+  cmr:          string;
+  p2tr:         string;
+  authority:    string;
+  balance_sats: number;
+  source:       string;
+}
+
+export const computeVaultSighash = async (to: string, fee_sats?: number): Promise<{
+  sighash: string
+}> => {
+  const res = await fetch('/api/vault/sighash', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ to, ...(fee_sats !== undefined ? { fee_sats } : {}) }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Sighash computation failed: ${res.status}`);
+  }
   return res.json();
 }
