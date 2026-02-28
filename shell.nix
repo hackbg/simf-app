@@ -5,8 +5,10 @@
     pkgs.mkShell ({ inherit name nativeBuildInputs; } // opts);
 
 in sh "oracle" [
-
+  pkgs.cloc
   pkgs.deno
+  pkgs.nodejs_24
+  pkgs.pnpm
   pkgs.just
   pkgs.podman
 
