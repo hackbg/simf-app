@@ -4,6 +4,10 @@ DENO_RUN := "deno run -P --unstable-kv"
 CLIENT   := "./service/client.ts"
 SERVER   := "./service/server.ts"
 
+# Run *PRIVATE* server and *PUBLIC* GUI dev server.
+dev:
+  node_modules/.bin/concurrently 'just server' 'pnpm dev:pub'
+
 # Display available commands
 [private]
 usage:
