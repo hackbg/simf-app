@@ -189,25 +189,9 @@ namespace Server {
   /** Request L-BTC from the Liquid testnet faucet for a given address. */
   export async function postFaucet({ req }: Context) {
     const { address } = JSON.parse(await Http.readBody(req));
-    if (!address || typeof address !== 'string') {
-      throw Object.assign(new Error('provide address'), { http: 400 });
-    }
-    const url = `https://liquidtestnet.com/api/faucet?address=${encodeURIComponent(address,)}&action=lbtc`;
-    const res = await fetch(url);
-    const body = await res.text();
-    if (!res.ok) throw Object.assign(new Error(body), { http: res.status });
-    const data = (() => {
-      try {
-        return JSON.parse(body);
-      } catch {
-        return { result: body };
-      }
-    })();
-    // Extract the 64-char hex txid embedded in the result string.
-    const txid = (data.result as string | undefined)?.match(/[0-9a-f]{64}/)?.[0] ?? null;
-    return { ...data, txid };
+    if (!address || typeof address !== 'string') throw Err('provide address', { http: 400 });
+    return await Bitcoin.LiquidTestnet.callFaucet(address);
   }
-
 
   export async function regtestSetup({ debug }) {
     debug('Starting Elements localnet');
