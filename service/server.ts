@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -P
 import type { Fn, Log } from 'fadroma';
-import { Http, Bytes, Bitcoin } from 'fadroma';
+import { Http, Bytes, Base16, Bitcoin } from 'fadroma';
 import { schnorr } from 'npm:@noble/curves/secp256k1.js';
 import { Service, FLAGS, DEFAULTS } from './common.ts';
 
@@ -34,7 +34,7 @@ async function Server({
   // Set ORACLE_PRIVKEY (64 hex chars) to persist the key across restarts.
   const oracleKey = Server.loadOracleKey(debug, warn);
   const oraclePubkey = schnorr.getPublicKey(oracleKey);
-  debug(`Oracle pubkey: ${Server.hex(oraclePubkey)}`);
+  debug(`Oracle pubkey: ${Base16.encode(oraclePubkey)}`);
 
   // For testing, the server can boot a localnet in `elementsregtest` mode.
   // This requires a compatible `elementsd` to be present on the system `PATH`.
@@ -194,12 +194,12 @@ namespace Server {
       timestamp,
       asset,
       price,
-      pubkey: hex(oraclePubkey),
+      pubkey: Base16.encode(oraclePubkey),
       // Display-only: oracle attests to the price at this timestamp.
       // For vault spends, use POST /vault with the spend sighash instead.
       witness: {
         PRICE: { type: 'u32', value: String(priceCents) },
-        SIG: { type: 'Signature', value: `0x${hex(sigBytes)}` },
+        SIG: { type: 'Signature', value: `0x${Base16.encode(sigBytes)}` },
       },
     };
   }
@@ -236,7 +236,7 @@ namespace Server {
     if (!vaultCache) {
       const { SimplicityHL } = await import('fadroma');
       const wasm = await SimplicityHL.Wasm();
-      const authority = `0x${hex(oraclePubkey)}`;
+      const authority = `0x${Base16.encode(oraclePubkey)}`;
       const args = { AUTHORITY: { type: 'Pubkey', value: authority } };
       const program = wasm.compile(VAULT_SOURCE, { args });
       const { cmr, p2tr, source } = ((program as unknown) as {
@@ -271,11 +271,11 @@ namespace Server {
     }
     const price = await fetchPrice();
     const priceCents = Math.round(price * 100);
-    const sigBytes = schnorr.sign(fromHex(sighash), oracleKey);
+    const sigBytes = schnorr.sign(Base16.decode(sighash), oracleKey);
     return {
       price,
       witness: {
-        SIG: { type: 'Signature', value: `0x${hex(sigBytes)}` },
+        SIG: { type: 'Signature', value: `0x${Base16.encode(sigBytes)}` },
         PRICE: { type: 'u32', value: String(priceCents) },
       },
     };
@@ -295,7 +295,7 @@ namespace Server {
     const txHex   = await fetch(`${esplora}/tx/${utxo.txid}/hex`).then(r => r.text());
     const { SimplicityHL } = await import('fadroma');
     const wasm    = await SimplicityHL.Wasm();
-    const prog    = wasm.compile(VAULT_SOURCE, { args: { AUTHORITY: { type: 'Pubkey', value: `0x${hex(oraclePubkey)}` } } });
+    const prog    = wasm.compile(VAULT_SOURCE, { args: { AUTHORITY: { type: 'Pubkey', value: `0x${Base16.encode(oraclePubkey)}` } } });
     const fee     = fee_sats / 1e8;
     const amount  = (utxo.value - fee_sats) / 1e8;
     if (amount <= 0) throw Object.assign(new Error('UTXO value too small to cover fee'), { http: 400 });
@@ -395,7 +395,7 @@ namespace Server {
     const envKey = Deno.env.get('ORACLE_PRIVKEY');
     if (envKey) {
       debug('Loaded oracle key from ORACLE_PRIVKEY');
-      return fromHex(envKey);
+      return Base16.decode(envKey);
     }
     const key = schnorr.utils.randomSecretKey();
     warn(
@@ -412,18 +412,4 @@ namespace Server {
     apiurl: string;
     esplora: string;
   }
-
-  // Byte utilities
-  export const hex = (b: Uint8Array) =>
-    Array.from(b)
-      .map((x) => x.toString(16).padStart(2, '0'))
-      .join('');
-
-  export const fromHex = (s: string) =>
-    new Uint8Array(
-      s
-        .replace(/^0x/, '')
-        .match(/.{2}/g)!
-        .map((x) => parseInt(x, 16)),
-    );
 }
