@@ -169,12 +169,18 @@ namespace Server {
       pubkey: Base16.encode(oraclePubkey),
       // Display-only: oracle attests to the price at this timestamp.
       // For vault spends, use POST /vault with the spend sighash instead.
-      witness: {
-        PRICE: { type: 'u32', value: String(priceCents) },
-        SIG: { type: 'Signature', value: `0x${Base16.encode(sigBytes)}` },
-      },
+      witness: signedWitness(priceCents, sigBytes),
     };
   }
+
+  const signedWithness = (priceCents: number, sigBytes: Uint8Array) => ({
+    PRICE: { type: 'u32',       value: String(priceCents) },
+    SIG:   { type: 'Signature', value: `0x${Base16.encode(sigBytes)}` },
+  });
+
+  const authorityArgs = (oraclePubkey: Uint8Array) => ({
+    AUTHORITY: { type: 'Pubkey', value: `0x${Base16.encode(oraclePubkey)}` }
+  })
 
   /** SimplicityHL vault program source. Authority is passed as param::AUTHORITY at compile time. */
   // Vault: oracle signs the spend sighash (price-gating is enforced offchain by the oracle).
@@ -197,7 +203,7 @@ namespace Server {
     if (!vaultCache) {
       const wasm = await Simf.Wasm();
       const authority = `0x${Base16.encode(oraclePubkey)}`;
-      const args = { AUTHORITY: { type: 'Pubkey', value: authority } };
+      const args = authorityArgs(oraclePubkey);
       const program = wasm.compile(VAULT_SOURCE, { args });
       const { cmr, p2tr, source } = ((program as unknown) as {
         toJSON(): { cmr: string; p2tr: string; source: string };
@@ -230,13 +236,7 @@ namespace Server {
     const price = await fetchPrice();
     const priceCents = Math.round(price * 100);
     const sigBytes = schnorr.sign(Base16.decode(sighash), oracleKey);
-    return {
-      price,
-      witness: {
-        SIG: { type: 'Signature', value: `0x${Base16.encode(sigBytes)}` },
-        PRICE: { type: 'u32', value: String(priceCents) },
-      },
-    };
+    return { price, witness: signedWitness(priceCents, sigBytes) };
   }
 
   /** Shared setup for vault spend endpoints: fetch UTXO, compile program, derive amounts. */
@@ -251,7 +251,8 @@ namespace Server {
     const utxo    = utxos.reduce((best, u) => u.value > best.value ? u : best);
     const txHex   = await Http.fetchText(`${esplora}/tx/${utxo.txid}/hex`);
     const wasm    = await Simf.Wasm();
-    const prog    = wasm.compile(VAULT_SOURCE, { args: { AUTHORITY: { type: 'Pubkey', value: `0x${Base16.encode(oraclePubkey)}` } } });
+    const args    = authorityArgs(oraclePubkey);
+    const prog    = wasm.compile(VAULT_SOURCE, { args });
     const fee     = fee_sats / 1e8;
     const amount  = (utxo.value - fee_sats) / 1e8;
     if (amount <= 0) throw Object.assign(new Error('UTXO value too small to cover fee'), { http: 400 });
