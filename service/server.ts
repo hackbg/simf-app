@@ -3,6 +3,8 @@ import type { Fn, Log } from 'fadroma';
 import { Http, Bytes, Base16, Bitcoin } from 'fadroma';
 import { schnorr } from 'npm:@noble/curves/secp256k1.js';
 import { Service, FLAGS, DEFAULTS } from './common.ts';
+import fetchPrice from './fetchPrice.ts';
+import fetchGenesis from './fetchGenesis.ts';
 
 export default Service(import.meta, Server, FLAGS);
 
@@ -134,26 +136,6 @@ namespace Server {
     return { took: {} };
   }
 
-  // Price cache - shared across requests, refreshed every PRICE_TTL_MS.
-  let priceCache: { price: number; fetchedAt: number } | null = null;
-  const PRICE_TTL_MS = 5_000;
-  export async function fetchPrice(): Promise<number> {
-    if (priceCache && Date.now() - priceCache.fetchedAt < PRICE_TTL_MS) {
-      return priceCache.price;
-    }
-    try {
-      const url = 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT';
-      const { price } = await Http.fetchJson(url);
-      priceCache = { price: parseFloat(price), fetchedAt: Date.now() };
-    } catch {
-      // Fallback to CoinGecko
-      const url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
-      const { data } = await Http.fetchJson(url);
-      priceCache = { price: data.bitcoin.usd, fetchedAt: Date.now() };
-    }
-    return priceCache!.price;
-  }
-
   /** Sign a price attestation with the oracle's Schnorr key.
    *
    * The signed message is: SHA-256(asset_utf8 || price_u32_be || timestamp_u64_be)
@@ -209,15 +191,6 @@ namespace Server {
     authority: string;
     source: string;
   } | null = null;
-
-  // Genesis block hash cache - constant for a given network.
-  let genesisCache: string | null = null;
-  async function fetchGenesis(esplora: string): Promise<string> {
-    if (!genesisCache) {
-      genesisCache = await Http.fetchText(`${esplora}/block-height/0`).then(s => s.trim());
-    }
-    return genesisCache;
-  }
 
   /** Compile the vault program with the oracle pubkey and return its P2TR address, CMR, and balance. */
   export async function getVaultInfo({ oraclePubkey, esplora }: Context) {
